@@ -47,6 +47,13 @@ function Login() {
     try {
       const response = await loginUser(formData);
 
+      localStorage.setItem(
+        "userInfo",
+        JSON.stringify({
+          email: formData.email,
+        })
+      );
+
       setMessage(response.message);
 
       setTimeout(() => {
