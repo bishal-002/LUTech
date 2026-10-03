@@ -3,6 +3,8 @@ const User = require("../models/User");
 //for bcrypt (password hassing)
 const bcrypt = require("bcryptjs");
 
+const nodemailer = require("nodemailer");
+
 //register function
 const registerUser = async (req, res) => {
   try {
@@ -30,15 +32,43 @@ const registerUser = async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // Generate OTP
+    const otp = Math.floor(
+      100000 + Math.random() * 900000
+    ).toString();
+
+    // OTP expires after 5 minutes
+    const otpExpires = new Date(
+      Date.now() + 5 * 60 * 1000
+    );
+
     // Create user
     await User.create({
       name,
       email,
-      password: hashedPassword
+      password: hashedPassword,
+      otp,
+      otpExpires,
+      isVerified: false
+    });
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "LUTech Email Verification",
+      text: `Your OTP is ${otp}. It will expire in 5 minutes.`,
     });
 
     return res.status(201).json({
-      message: "User registered successfully"
+      message: "Registered successfully. OTP sent to your email."
     });
 
   } catch (error) {
