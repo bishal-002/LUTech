@@ -8,6 +8,7 @@ const dotenv = require("dotenv");
 const connectDB = require("./config/db");
 const userRoutes = require("./routes/userRoutes");
 const productRoutes = require("./routes/productRoutes");
+const testEmailRoute = require("./routes/testEmailRoute");
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ app.use(express.json());
 
 app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/test-email", testEmailRoute);
 
 app.get("/", (req, res) => {
   res.send("LUTech API Running");
