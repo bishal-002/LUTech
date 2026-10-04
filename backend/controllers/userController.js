@@ -1,6 +1,6 @@
 //model import
 const User = require("../models/User");
-//for bcrypt (password hassing)
+//for bcrypt (password hashing)
 const bcrypt = require("bcryptjs");
 
 const nodemailer = require("nodemailer");
@@ -101,6 +101,12 @@ const loginUser = async (req, res) => {
       });
     }
 
+    if (!user.isVerified) {
+      return res.status(400).json({
+        message: "Please verify your email first"
+      });
+    }
+
     // Compare password
     const isMatch = await bcrypt.compare(
       password,
@@ -126,8 +132,64 @@ const loginUser = async (req, res) => {
   }
 };
 
+const verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        message: "Email and OTP are required"
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found"
+      });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({
+        message: "Account already verified"
+      });
+    }
+
+    if (user.otp !== otp) {
+      return res.status(400).json({
+        message: "Invalid OTP"
+      });
+    }
+
+    if (user.otpExpires < new Date()) {
+      return res.status(400).json({
+        message: "OTP expired"
+      });
+    }
+
+    user.isVerified = true;
+    user.otp = null;
+    user.otpExpires = null;
+
+    await user.save();
+
+    return res.status(200).json({
+      message: "Email verified successfully"
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Server Error"
+    });
+  }
+};
+
 //export function
 module.exports = {
   registerUser,
-  loginUser
+  loginUser,
+  verifyOTP
 };
