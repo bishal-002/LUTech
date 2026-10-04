@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { registerUser } from "../services/authService";
 
 function Register() {
-  
+
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -70,6 +70,10 @@ function Register() {
       });
 
       setMessage(response.message);
+
+      setTimeout(() => {
+        navigate("/verify-otp");
+      }, 2000);
 
       setFormData({
         name: "",

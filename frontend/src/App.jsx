@@ -9,6 +9,7 @@ import Cart from "./pages/Cart";
 import AdminLogin from "./pages/AdminLogin";
 import AdminProducts from "./pages/AdminProducts";
 import ProductForm from "./pages/ProductForm";
+import VerifyOTP from "./pages/VerifyOTP";
 
 function App() {
   return (
@@ -23,6 +24,8 @@ function App() {
         <Route path="/login" element={<Login />} />
 
         <Route path="/register" element={<Register />} />
+
+        <Route path="/verify-otp" element={<VerifyOTP />} />
 
         <Route path="/cart" element={<Cart />} />
 
