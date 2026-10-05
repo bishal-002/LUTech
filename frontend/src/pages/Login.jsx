@@ -49,9 +49,7 @@ function Login() {
 
       localStorage.setItem(
         "userInfo",
-        JSON.stringify({
-          email: formData.email,
-        })
+        JSON.stringify(response.user)
       );
 
       setMessage(response.message);
