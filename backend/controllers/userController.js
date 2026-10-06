@@ -254,11 +254,38 @@ const updateUserProfile = async (req, res) => {
   }
 };
 
+//delete profile
+const deleteUserProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found"
+      });
+    }
+
+    await User.findByIdAndDelete(req.params.id);
+
+    return res.status(200).json({
+      message: "Account deleted successfully"
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Server Error"
+    });
+  }
+};
+
 //export function
 module.exports = {
   registerUser,
   loginUser,
   getUserProfile,
   updateUserProfile,
+  deleteUserProfile,
   verifyOTP
 };
