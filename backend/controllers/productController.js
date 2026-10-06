@@ -72,8 +72,77 @@ const getProductById = async (req, res) => {
   }
 };
 
+// Update Product
+const updateProduct = async (req, res) => {
+  try {
+    const { name, price, image, description } =
+      req.body;
+
+    const product = await Product.findById(
+      req.params.id
+    );
+
+    if (!product) {
+      return res.status(404).json({
+        message: "Product not found",
+      });
+    }
+
+    product.name = name || product.name;
+    product.price = price || product.price;
+    product.image = image || product.image;
+    product.description =
+      description || product.description;
+
+    const updatedProduct =
+      await product.save();
+
+    res.status(200).json({
+      message: "Product updated successfully",
+      product: updatedProduct,
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: "Server Error",
+    });
+  }
+};
+
+// Delete Product
+const deleteProduct = async (req, res) => {
+  try {
+    const product = await Product.findById(
+      req.params.id
+    );
+
+    if (!product) {
+      return res.status(404).json({
+        message: "Product not found",
+      });
+    }
+
+    await product.deleteOne();
+
+    res.status(200).json({
+      message: "Product deleted successfully",
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: "Server Error",
+    });
+  }
+};
+
 module.exports = {
   createProduct,
   getProducts,
   getProductById,
+  updateProduct,
+  deleteProduct,
 };
