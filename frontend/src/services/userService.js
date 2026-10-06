@@ -21,3 +21,11 @@ export const updateUserProfile = async (
 
   return response.data;
 };
+
+export const deleteUserProfile = async (id) => {
+  const response = await axios.delete(
+    `${API_URL}/profile/${id}`
+  );
+
+  return response.data;
+};

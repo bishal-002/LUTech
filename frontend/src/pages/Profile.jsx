@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 import {
   getUserProfile,
-  updateUserProfile
+  updateUserProfile,
+  deleteUserProfile
 } from "../services/userService";
 
 function Profile() {
+  const navigate = useNavigate();
+
   const [user, setUser] = useState(null);
 
   const [name, setName] = useState("");
@@ -41,6 +46,9 @@ function Profile() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    setMessage("");
+    setError("");
+
     try {
       const userInfo = JSON.parse(
         localStorage.getItem("userInfo")
@@ -49,10 +57,15 @@ function Profile() {
       const response =
         await updateUserProfile(
           userInfo._id,
-          { name, address }
+          {
+            name,
+            address
+          }
         );
 
       setMessage(response.message);
+
+      setUser(response.user);
 
       localStorage.setItem(
         "userInfo",
@@ -61,6 +74,39 @@ function Profile() {
 
     } catch (err) {
       setError("Failed to update profile");
+    }
+  };
+
+  const handleDelete = async () => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete your account?"
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      const userInfo = JSON.parse(
+        localStorage.getItem("userInfo")
+      );
+
+      await deleteUserProfile(
+        userInfo._id
+      );
+
+      localStorage.removeItem(
+        "userInfo"
+      );
+
+      alert(
+        "Account deleted successfully"
+      );
+
+      navigate("/");
+
+    } catch (err) {
+      setError(
+        "Failed to delete account"
+      );
     }
   };
 
@@ -146,15 +192,20 @@ function Profile() {
                 </div>
 
                 <div className="mb-3">
-                    <label className="form-lable">
-                        Address
-                    </label>
-                    <textarea
-                        className="form-control"
-                        rows="3"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                    />
+                  <label className="form-label">
+                    Address
+                  </label>
+
+                  <textarea
+                    className="form-control"
+                    rows="3"
+                    value={address}
+                    onChange={(e) =>
+                      setAddress(
+                        e.target.value
+                      )
+                    }
+                  />
                 </div>
 
                 <button
@@ -162,6 +213,14 @@ function Profile() {
                   className="btn btn-primary w-100"
                 >
                   Update Profile
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-danger w-100 mt-3"
+                  onClick={handleDelete}
+                >
+                  Delete Account
                 </button>
 
               </form>
