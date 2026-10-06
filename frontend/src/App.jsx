@@ -34,7 +34,9 @@ function App() {
 
         <Route path="/admin/products" element={<AdminProducts />} />
 
-        <Route path="/admin/product" element={<ProductForm />} />
+        <Route path="/admin/products/add" element={<ProductForm />} />
+
+        <Route path="/admin/products/edit/:id" element={<ProductForm />} />
 
         <Route path="/profile" element={<Profile />} />
       </Routes>
