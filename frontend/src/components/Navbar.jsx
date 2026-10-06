@@ -41,8 +41,15 @@ function Navbar() {
           ) : (
             <>
               <span className="text-white me-3">
-                Welcome User
+                Welcome {userInfo.name}
               </span>
+
+              <Link
+                to="/profile"
+                className="btn btn-light me-2"
+              >
+                Profile
+              </Link>
 
               <button
                 onClick={handleLogout}
