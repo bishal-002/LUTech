@@ -10,6 +10,7 @@ import AdminLogin from "./pages/AdminLogin";
 import AdminProducts from "./pages/AdminProducts";
 import ProductForm from "./pages/ProductForm";
 import VerifyOTP from "./pages/VerifyOTP";
+import Profile from "./pages/Profile";
 
 function App() {
   return (
@@ -34,6 +35,8 @@ function App() {
         <Route path="/admin/products" element={<AdminProducts />} />
 
         <Route path="/admin/product" element={<ProductForm />} />
+
+        <Route path="/profile" element={<Profile />} />
       </Routes>
     </BrowserRouter>
   );

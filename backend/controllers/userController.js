@@ -219,7 +219,7 @@ const getUserProfile = async (req, res) => {
 //update user profile
 const updateUserProfile = async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, address } = req.body;
 
     const user = await User.findById(req.params.id);
 
@@ -230,6 +230,7 @@ const updateUserProfile = async (req, res) => {
     }
 
     user.name = name || user.name;
+    user.address = address || user.address;
 
     await user.save();
 
@@ -239,6 +240,7 @@ const updateUserProfile = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        address: user.address,
         isVerified: user.isVerified
       }
     });
