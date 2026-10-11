@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   useNavigate,
@@ -28,13 +28,7 @@ function ProductForm() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (isEditMode) {
-      fetchProduct();
-    }
-  }, []);
-
-  const fetchProduct = async () => {
+  const fetchProduct = useCallback(async () => {
     try {
       const product = await getProductById(id);
 
@@ -44,11 +38,20 @@ function ProductForm() {
         image: product.image,
         description: product.description || "",
       });
-
-    } catch (err) {
+    } catch {
       setError("Failed to load product");
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    const loadProduct = async () => {
+      if (isEditMode) {
+        await fetchProduct();
+      }
+    };
+
+    loadProduct();
+  }, [isEditMode, fetchProduct]);
 
   const handleChange = (e) => {
     setFormData({

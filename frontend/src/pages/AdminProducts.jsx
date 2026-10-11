@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Link } from "react-router-dom";
 
@@ -10,14 +10,18 @@ import {
 function AdminProducts() {
   const [products, setProducts] = useState([]);
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     const data = await getProducts();
     setProducts(data);
-  };
+  }, []);
+
+  useEffect(() => {
+    const loadProducts = async () => {
+      await fetchProducts();
+    };
+
+    loadProducts();
+  }, [fetchProducts]);
 
   const handleDelete = async (id) => {
     const confirmDelete = window.confirm(

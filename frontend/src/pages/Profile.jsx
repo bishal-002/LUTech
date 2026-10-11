@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -20,28 +20,29 @@ function Profile() {
 
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       const userInfo = JSON.parse(
         localStorage.getItem("userInfo")
       );
 
-      const data = await getUserProfile(
-        userInfo._id
-      );
+      const data = await getUserProfile(userInfo._id);
 
       setUser(data);
       setName(data.name);
       setAddress(data.address || "");
-
-    } catch (err) {
+    } catch {
       setError("Failed to load profile");
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      await fetchProfile();
+    };
+
+    loadProfile();
+  }, [fetchProfile]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -72,7 +73,7 @@ function Profile() {
         JSON.stringify(response.user)
       );
 
-    } catch (err) {
+    } catch {
       setError("Failed to update profile");
     }
   };
@@ -103,7 +104,7 @@ function Profile() {
 
       navigate("/");
 
-    } catch (err) {
+    } catch {
       setError(
         "Failed to delete account"
       );
