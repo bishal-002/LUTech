@@ -1,3 +1,4 @@
+
 const express = require("express");
 
 const {
@@ -6,21 +7,21 @@ const {
   getUserProfile,
   updateUserProfile,
   deleteUserProfile,
-  verifyOTP
+  verifyOTP,
 } = require("../controllers/userController");
+
+const { protect } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
+// Public authentication routes
 router.post("/register", registerUser);
-
 router.post("/login", loginUser);
-
 router.post("/verify-otp", verifyOTP);
 
-router.get("/profile/:id", getUserProfile);
-
-router.put("/profile/:id", updateUserProfile);
-
-router.delete("/profile/:id", deleteUserProfile);
+// Protected profile routes
+router.get("/profile/:id", protect, getUserProfile);
+router.put("/profile/:id", protect, updateUserProfile);
+router.delete("/profile/:id", protect, deleteUserProfile);
 
 module.exports = router;

@@ -207,92 +207,95 @@ const verifyOTP = async (req, res) => {
   }
 };
 
-//get user profile
+
 const getUserProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
-      .select("-password -otp");
+    const user = await User.findById(req.user._id).select(
+      "-password -otp -otpExpires"
+    );
 
     if (!user) {
       return res.status(404).json({
-        message: "User not found"
+        message: "User not found",
       });
     }
 
-    res.status(200).json(user);
-
+    return res.status(200).json(user);
   } catch (error) {
     console.error(error);
 
-    res.status(500).json({
-      message: "Server Error"
+    return res.status(500).json({
+      message: "Server Error",
     });
   }
 };
 
-//update user profile
 const updateUserProfile = async (req, res) => {
   try {
     const { name, address } = req.body;
 
-    const user = await User.findById(req.params.id);
+    const user = await User.findById(req.user._id);
 
     if (!user) {
       return res.status(404).json({
-        message: "User not found"
+        message: "User not found",
       });
     }
 
-    user.name = name || user.name;
-    user.address = address || user.address;
+    if (typeof name === "string" && name.trim()) {
+      user.name = name.trim();
+    }
+
+    if (typeof address === "string") {
+      user.address = address.trim();
+    }
 
     await user.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Profile updated successfully",
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         address: user.address,
-        isVerified: user.isVerified
-      }
+        role: user.role,
+        isVerified: user.isVerified,
+      },
     });
-
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      message: "Server Error"
-    });
-  }
-};
-
-//delete profile
-const deleteUserProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found"
-      });
-    }
-
-    await User.findByIdAndDelete(req.params.id);
-
-    return res.status(200).json({
-      message: "Account deleted successfully"
-    });
-
   } catch (error) {
     console.error(error);
 
     return res.status(500).json({
-      message: "Server Error"
+      message: "Server Error",
     });
   }
 };
+
+const deleteUserProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    await user.deleteOne();
+
+    return res.status(200).json({
+      message: "Account deleted successfully",
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Server Error",
+    });
+  }
+};
+
 
 //export function
 module.exports = {
