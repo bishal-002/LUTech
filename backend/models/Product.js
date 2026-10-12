@@ -1,28 +1,39 @@
+
 const mongoose = require("mongoose");
 
 const productSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: true
+      required: true,
+      trim: true,
     },
 
     price: {
       type: Number,
-      required: true
+      required: true,
+      min: 0,
     },
 
     image: {
       type: String,
-      required: true
+      required: true,
     },
 
     description: {
-      type: String
-    }
+      type: String,
+      default: "",
+    },
+
+    // Optional to preserve existing products without a seller.
+    sellerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   {
-    timestamps: true
+    timestamps: true,
   }
 );
 
