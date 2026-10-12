@@ -1,9 +1,9 @@
+
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { registerUser } from "../services/authService";
 
 function Register() {
-
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -27,8 +27,8 @@ function Register() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (
-      !formData.name ||
-      !formData.email ||
+      !formData.name.trim() ||
+      !formData.email.trim() ||
       !formData.password ||
       !formData.confirmPassword
     ) {
@@ -64,16 +64,12 @@ function Register() {
 
     try {
       const response = await registerUser({
-        name: formData.name,
-        email: formData.email,
+        name: formData.name.trim(),
+        email: formData.email.trim(),
         password: formData.password,
       });
 
-      setMessage(response.message);
-
-      setTimeout(() => {
-        navigate("/verify-otp");
-      }, 2000);
+      setMessage(response.message || "Registration successful. Please verify your email.");
 
       setFormData({
         name: "",
@@ -83,110 +79,171 @@ function Register() {
       });
 
       setTimeout(() => {
-        navigate("/Login");
+        navigate("/verify-otp");
       }, 1500);
-
     } catch (err) {
       setError(
-        err.response?.data?.message ||
-        "Registration failed"
+        err.response?.data?.message || "Registration failed"
       );
     }
   };
 
+  const inputClass =
+    "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100";
+
   return (
-    <div className="container mt-5">
-      <div className="row justify-content-center">
-        <div className="col-md-6">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-100 via-white to-blue-100 px-4 py-10">
+      <div className="w-full max-w-lg">
+        <Link
+          to="/"
+          className="mb-7 block text-center text-3xl font-extrabold tracking-tight text-blue-700"
+        >
+          LUTech
+        </Link>
 
-          <div className="card shadow">
-            <div className="card-body">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-9">
+          <div className="mb-8 text-center">
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
+              Create Account
+            </h1>
 
-              <h2 className="text-center mb-4">
-                Create Account
-              </h2>
-
-              {message && (
-                <div className="alert alert-success">
-                  {message}
-                </div>
-              )}
-
-              {error && (
-                <div className="alert alert-danger">
-                  {error}
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit}>
-
-                <div className="mb-3">
-                  <label className="form-label">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div className="mb-3">
-                  <label className="form-label">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    className="form-control"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div className="mb-3">
-                  <label className="form-label">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    className="form-control"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div className="mb-3">
-                  <label className="form-label">
-                    Confirm Password
-                  </label>
-                  <input
-                    type="password"
-                    className="form-control"
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="btn btn-primary w-100"
-                >
-                  Register
-                </button>
-
-              </form>
-
-            </div>
+            <p className="mt-2 text-sm text-slate-500">
+              Join LUTech to explore our electronics collection.
+            </p>
           </div>
 
-        </div>
+          {message && (
+            <div
+              role="status"
+              className="mb-5 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800"
+            >
+              {message}
+            </div>
+          )}
+
+          {error && (
+            <div
+              role="alert"
+              className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+            >
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label
+                htmlFor="name"
+                className="mb-2 block text-sm font-semibold text-slate-700"
+              >
+                Full Name
+              </label>
+
+              <input
+                id="name"
+                type="text"
+                name="name"
+                autoComplete="name"
+                placeholder="Enter your full name"
+                value={formData.name}
+                onChange={handleChange}
+                required
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="email"
+                className="mb-2 block text-sm font-semibold text-slate-700"
+              >
+                Email Address
+              </label>
+
+              <input
+                id="email"
+                type="email"
+                name="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={formData.email}
+                onChange={handleChange}
+                required
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="password"
+                className="mb-2 block text-sm font-semibold text-slate-700"
+              >
+                Password
+              </label>
+
+              <input
+                id="password"
+                type="password"
+                name="password"
+                autoComplete="new-password"
+                placeholder="At least 6 characters"
+                value={formData.password}
+                onChange={handleChange}
+                minLength={6}
+                required
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="confirmPassword"
+                className="mb-2 block text-sm font-semibold text-slate-700"
+              >
+                Confirm Password
+              </label>
+
+              <input
+                id="confirmPassword"
+                type="password"
+                name="confirmPassword"
+                autoComplete="new-password"
+                placeholder="Re-enter your password"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                minLength={6}
+                required
+                className={inputClass}
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full rounded-xl bg-blue-700 px-4 py-3 font-bold text-white shadow-sm transition hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-200"
+            >
+              Create Account
+            </button>
+          </form>
+
+          <p className="mt-6 text-center text-sm text-slate-600">
+            Already have an account?{" "}
+            <Link
+              to="/login"
+              className="font-semibold text-blue-700 hover:text-blue-900"
+            >
+              Sign in
+            </Link>
+          </p>
+
+          <Link
+            to="/"
+            className="mt-5 block text-center text-sm text-slate-500 transition hover:text-blue-700"
+          >
+            ← Back to Home
+          </Link>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }
 

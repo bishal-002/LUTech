@@ -81,33 +81,34 @@ const registerUser = async (req, res) => {
 };
 
 //login function
+
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validation
     if (!email || !password) {
       return res.status(400).json({
-        message: "Email and password are required"
+        message: "Email and password are required",
       });
     }
 
-    // Find user
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await User.findOne({
+      email: normalizedEmail,
+    });
 
     if (!user) {
       return res.status(400).json({
-        message: "Invalid email or password"
+        message: "Invalid email or password",
       });
     }
 
     if (!user.isVerified) {
       return res.status(400).json({
-        message: "Please verify your email first"
+        message: "Please verify your email first",
       });
     }
 
-    // Compare password
     const isMatch = await bcrypt.compare(
       password,
       user.password
@@ -115,28 +116,41 @@ const loginUser = async (req, res) => {
 
     if (!isMatch) {
       return res.status(400).json({
-        message: "Invalid email or password"
+        message: "Invalid email or password",
       });
     }
 
+    const jwt = require("jsonwebtoken");
+    const token = jwt.sign(
+      {
+        userId: user._id.toString(),
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d",
+      }
+    );
+
     return res.status(200).json({
       message: "Login successful",
+      token,
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
-        isVerified: user.isVerified
-      }
+        role: user.role || "customer",
+        isVerified: user.isVerified,
+      },
     });
-
   } catch (error) {
     console.error(error);
 
     return res.status(500).json({
-      message: "Server Error"
+      message: "Server Error",
     });
   }
 };
+
 
 const verifyOTP = async (req, res) => {
   try {

@@ -1,3 +1,4 @@
+
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Home from "./pages/Home";
@@ -11,34 +12,37 @@ import AdminProducts from "./pages/AdminProducts";
 import ProductForm from "./pages/ProductForm";
 import VerifyOTP from "./pages/VerifyOTP";
 import Profile from "./pages/Profile";
+import AdminRoute from "./components/AdminRoute";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
-
         <Route path="/products" element={<Products />} />
-
         <Route path="/product/:id" element={<ProductDetails />} />
-
         <Route path="/login" element={<Login />} />
-
         <Route path="/register" element={<Register />} />
-
         <Route path="/verify-otp" element={<VerifyOTP />} />
-
         <Route path="/cart" element={<Cart />} />
+        <Route path="/profile" element={<Profile />} />
 
         <Route path="/admin/login" element={<AdminLogin />} />
 
-        <Route path="/admin/products" element={<AdminProducts />} />
-
-        <Route path="/admin/products/add" element={<ProductForm />} />
-
-        <Route path="/admin/products/edit/:id" element={<ProductForm />} />
-
-        <Route path="/profile" element={<Profile />} />
+        <Route element={<AdminRoute />}>
+          <Route
+            path="/admin/products"
+            element={<AdminProducts />}
+          />
+          <Route
+            path="/admin/products/add"
+            element={<ProductForm />}
+          />
+          <Route
+            path="/admin/products/edit/:id"
+            element={<ProductForm />}
+          />
+        </Route>
       </Routes>
     </BrowserRouter>
   );
