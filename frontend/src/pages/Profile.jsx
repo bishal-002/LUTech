@@ -125,6 +125,7 @@ function Profile() {
       const storedUser = localStorage.getItem("userInfo");
 
       if (!storedUser) {
+        localStorage.removeItem("token");
         localStorage.removeItem("userInfo");
         navigate("/login");
         return;

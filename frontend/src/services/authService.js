@@ -20,6 +20,7 @@ export const loginUser = async (userData) => {
   return response.data;
 };
 
+
 export const verifyOTP = async (otpData) => {
   const response = await axios.post(
     `${API_URL}/verify-otp`,
