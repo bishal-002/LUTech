@@ -12,6 +12,7 @@ import AdminProducts from "./pages/AdminProducts";
 import ProductForm from "./pages/ProductForm";
 import VerifyOTP from "./pages/VerifyOTP";
 import Profile from "./pages/Profile";
+import AdminDashboard from "./pages/AdminDashboard";
 import AdminRoute from "./components/AdminRoute";
 
 function App() {
@@ -30,18 +31,10 @@ function App() {
         <Route path="/admin/login" element={<AdminLogin />} />
 
         <Route element={<AdminRoute />}>
-          <Route
-            path="/admin/products"
-            element={<AdminProducts />}
-          />
-          <Route
-            path="/admin/products/add"
-            element={<ProductForm />}
-          />
-          <Route
-            path="/admin/products/edit/:id"
-            element={<ProductForm />}
-          />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/products" element={<AdminProducts />} />
+          <Route path="/admin/products/add" element={<ProductForm />} />
+          <Route path="/admin/products/edit/:id" element={<ProductForm />} />
         </Route>
       </Routes>
     </BrowserRouter>

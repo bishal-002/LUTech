@@ -54,7 +54,7 @@ function AdminLogin() {
         JSON.stringify(response.user)
       );
 
-      navigate("/admin/products", { replace: true });
+      navigate("/admin/dashboard", { replace: true });
     } catch (err) {
       setError(
         err.response?.data?.message ||
