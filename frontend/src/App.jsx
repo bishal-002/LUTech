@@ -14,6 +14,7 @@ import VerifyOTP from "./pages/VerifyOTP";
 import Profile from "./pages/Profile";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminRoute from "./components/AdminRoute";
+import AdminUsers from "./pages/AdminUsers";
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
           <Route path="/admin/products" element={<AdminProducts />} />
           <Route path="/admin/products/add" element={<ProductForm />} />
           <Route path="/admin/products/edit/:id" element={<ProductForm />} />
+          <Route path="/admin/users" element={<AdminUsers />} />
         </Route>
       </Routes>
     </BrowserRouter>
