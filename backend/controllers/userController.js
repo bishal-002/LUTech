@@ -5,15 +5,24 @@ const bcrypt = require("bcryptjs");
 
 const nodemailer = require("nodemailer");
 
-//register function
+
+// Register function
 const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
+    const accountType = req.body.accountType || "customer";
 
     // Check empty fields
     if (!name || !email || !password) {
       return res.status(400).json({
         message: "All fields are required"
+      });
+    }
+
+    // Allow only customer and seller registration
+    if (!["customer", "seller"].includes(accountType)) {
+      return res.status(400).json({
+        message: "Invalid account type"
       });
     }
 
@@ -47,6 +56,9 @@ const registerUser = async (req, res) => {
       name,
       email,
       password: hashedPassword,
+      role: accountType,
+      sellerStatus:
+        accountType === "seller" ? "pending" : "not_applicable",
       otp,
       otpExpires,
       isVerified: false
@@ -79,6 +91,7 @@ const registerUser = async (req, res) => {
     });
   }
 };
+
 
 //login function
 

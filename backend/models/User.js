@@ -28,6 +28,12 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
 
+    sellerStatus: {
+      type: String,
+      enum: ["not_applicable", "pending", "approved", "rejected"],
+      default: "not_applicable",
+    },
+
     otp: {
       type: String,
     },

@@ -199,9 +199,94 @@ const deleteUser = async (req, res) => {
   }
 };
 
+
+const getSellerApplications = async (req, res) => {
+  try {
+    const sellers = await User.find({
+      role: "seller",
+      sellerStatus: "pending"
+    }).select("_id name email isVerified sellerStatus createdAt");
+
+    return res.status(200).json({
+      count: sellers.length,
+      sellers
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Server Error"
+    });
+  }
+};
+
+const approveSeller = async (req, res) => {
+  try {
+    const seller = await User.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        role: "seller",
+        sellerStatus: "pending",
+        isVerified: true
+      },
+      { sellerStatus: "approved" },
+      { new: true }
+    ).select("_id name email role sellerStatus");
+
+    if (!seller) {
+      return res.status(400).json({
+        message: "Seller not found, not verified, or already processed"
+      });
+    }
+
+    return res.status(200).json({
+      message: "Seller approved successfully",
+      seller
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Server Error"
+    });
+  }
+};
+
+const rejectSeller = async (req, res) => {
+  try {
+    const seller = await User.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        role: "seller",
+        sellerStatus: "pending"
+      },
+      { sellerStatus: "rejected" },
+      { new: true }
+    ).select("_id name email role sellerStatus");
+
+    if (!seller) {
+      return res.status(404).json({
+        message: "Pending seller application not found"
+      });
+    }
+
+    return res.status(200).json({
+      message: "Seller application rejected",
+      seller
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Server Error"
+    });
+  }
+};
+
+
 module.exports = {
   getAllUsers,
   getUserStats,
   updateUserRole,
   deleteUser,
+  getSellerApplications,
+  approveSeller,
+  rejectSeller,
 };

@@ -23,7 +23,7 @@ const protect = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const user = await User.findById(decoded.userId).select(
-      "_id name email role isVerified"
+      "_id name email role isVerified sellerStatus"
     );
 
     if (!user || !user.isVerified) {
@@ -50,5 +50,22 @@ const adminOnly = (req, res, next) => {
 
   next();
 };
+const sellerOnly = (req, res, next) => {
+  if (
+    req.user.role === "seller" &&
+    req.user.sellerStatus === "approved" &&
+    req.user.isVerified
+  ) {
+    return next();
+  }
 
-module.exports = { protect, adminOnly };
+  return res.status(403).json({
+    message: "Approved seller access required"
+  });
+};
+
+module.exports = { 
+  protect, 
+  adminOnly,
+  sellerOnly
+};

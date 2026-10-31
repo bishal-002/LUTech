@@ -6,6 +6,9 @@ const {
   getUserStats,
   updateUserRole,
   deleteUser,
+  getSellerApplications,
+  approveSeller,
+  rejectSeller
 } = require("../controllers/adminController");
 
 const {
@@ -18,16 +21,15 @@ const router = express.Router();
 // All routes require Admin authentication
 router.use(protect, adminOnly);
 
-// Get user statistics
+// User management
 router.get("/users/stats", getUserStats);
-
-// Get all users
 router.get("/users", getAllUsers);
-
-// Update user role
 router.put("/users/:id/role", updateUserRole);
-
-// Delete user
 router.delete("/users/:id", deleteUser);
+
+// Seller application management
+router.get("/sellers", getSellerApplications);
+router.put("/sellers/:id/approve", approveSeller);
+router.put("/sellers/:id/reject", rejectSeller);
 
 module.exports = router;
