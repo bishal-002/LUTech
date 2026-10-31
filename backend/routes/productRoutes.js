@@ -12,23 +12,27 @@ const {
 const {
   protect,
   adminOnly,
+  sellerOnly,
 } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// Public: view all products
-router.get("/", getProducts);
+// Allow Admin or approved Seller
+const adminOrSeller = (req, res, next) => {
+  if (req.user && req.user.role === "admin") {
+    return next();
+  }
 
-// Public: view a single product
+  return sellerOnly(req, res, next);
+};
+
+// Public routes
+router.get("/", getProducts);
 router.get("/:id", getProductById);
 
-// Admin only: create a product
-router.post("/", protect, adminOnly, createProduct);
-
-// Admin only: update a product
-router.put("/:id", protect, adminOnly, updateProduct);
-
-// Admin only: delete a product
-router.delete("/:id", protect, adminOnly, deleteProduct);
+// Admin or approved Seller routes
+router.post("/", protect, adminOrSeller, createProduct);
+router.put("/:id", protect, adminOrSeller, updateProduct);
+router.delete("/:id", protect, adminOrSeller, deleteProduct);
 
 module.exports = router;
