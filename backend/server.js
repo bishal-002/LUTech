@@ -11,6 +11,7 @@ const productRoutes = require("./routes/productRoutes");
 const testEmailRoute = require("./routes/testEmailRoute");
 const adminRoutes = require("./routes/adminRoutes");
 const sellerRoutes = require("./routes/sellerRoutes");
+const orderRoutes = require("./routes/orderRoutes");
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/test-email", testEmailRoute);
 app.use("/api/admin", adminRoutes);
 app.use("/api/seller", sellerRoutes);
+app.use("/api/seller/orders", orderRoutes);
 
 app.get("/", (req, res) => {
   res.send("LUTech API Running");
