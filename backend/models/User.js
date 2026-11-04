@@ -51,6 +51,30 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    storeName: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    storeDescription: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    storePhone: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    storeAddress: {
+      type: String,
+      trim: true,
+      default: "",
+    },
   },
   {
     timestamps: true,

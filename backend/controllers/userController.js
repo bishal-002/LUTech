@@ -310,6 +310,90 @@ const deleteUserProfile = async (req, res) => {
 };
 
 
+const getSellerProfile = async (req, res) => {
+  try {
+    const seller = await User.findOne({
+      _id: req.user._id,
+      role: "seller",
+      sellerStatus: "approved",
+      isVerified: true,
+    }).select(
+      "_id name email storeName storeDescription storePhone storeAddress"
+    );
+
+    if (!seller) {
+      return res.status(404).json({
+        message: "Seller profile not found",
+      });
+    }
+
+    return res.status(200).json({ seller });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Server Error",
+    });
+  }
+};
+
+const updateSellerProfile = async (req, res) => {
+  try {
+    const {
+      storeName,
+      storeDescription,
+      storePhone,
+      storeAddress,
+    } = req.body;
+
+    if (!storeName || !storeName.trim()) {
+      return res.status(400).json({
+        message: "Store name is required",
+      });
+    }
+
+    const seller = await User.findOneAndUpdate(
+      {
+        _id: req.user._id,
+        role: "seller",
+        sellerStatus: "approved",
+        isVerified: true,
+      },
+      {
+        storeName: storeName.trim(),
+        storeDescription: storeDescription?.trim() || "",
+        storePhone: storePhone?.trim() || "",
+        storeAddress: storeAddress?.trim() || "",
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    ).select(
+      "_id name email storeName storeDescription storePhone storeAddress"
+    );
+
+    if (!seller) {
+      return res.status(404).json({
+        message: "Seller profile not found",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Store profile updated successfully",
+      seller,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Server Error",
+    });
+  }
+};
+
+
+
 //export function
 module.exports = {
   registerUser,
@@ -317,5 +401,7 @@ module.exports = {
   getUserProfile,
   updateUserProfile,
   deleteUserProfile,
-  verifyOTP
+  verifyOTP,
+  getSellerProfile,
+  updateSellerProfile
 };
