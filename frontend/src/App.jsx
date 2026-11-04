@@ -18,6 +18,7 @@ import AdminUsers from "./pages/AdminUsers";
 import SellerDashboard from "./pages/SellerDashboard";
 import SellerProducts from "./pages/SellerProducts";
 import SellerProductForm from "./pages/SellerProductForm";
+import SellerOrders from "./pages/SellerOrders";
 
 function App() {
   return (
@@ -33,10 +34,9 @@ function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/seller/dashboard" element={<SellerDashboard />} />
         <Route path="/seller/products" element={<SellerProducts />} />
-
         <Route path="/seller/products/add" element={<SellerProductForm />} />
-
         <Route path="/seller/products/edit/:id" element={<SellerProductForm />} />
+        <Route path="/seller/orders" element={<SellerOrders />} />
 
 
         <Route path="/admin/login" element={<AdminLogin />} />
