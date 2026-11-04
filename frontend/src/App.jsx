@@ -19,6 +19,7 @@ import SellerDashboard from "./pages/SellerDashboard";
 import SellerProducts from "./pages/SellerProducts";
 import SellerProductForm from "./pages/SellerProductForm";
 import SellerOrders from "./pages/SellerOrders";
+import SellerStoreProfile from "./pages/SellerStoreProfile";
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
         <Route path="/seller/products/add" element={<SellerProductForm />} />
         <Route path="/seller/products/edit/:id" element={<SellerProductForm />} />
         <Route path="/seller/orders" element={<SellerOrders />} />
+        <Route path="/seller/store-profile" element={<SellerStoreProfile />} />
 
 
         <Route path="/admin/login" element={<AdminLogin />} />

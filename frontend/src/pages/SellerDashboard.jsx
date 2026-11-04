@@ -105,7 +105,7 @@ function SellerDashboard() {
           </Link>
 
           <Link
-            to="/seller/profile"
+            to="/seller/store-profile"
             className="block rounded-lg px-4 py-3 text-slate-300 hover:bg-slate-800"
           >
             Store Profile
@@ -228,6 +228,18 @@ function SellerDashboard() {
                 </h4>
                 <p className="mt-2 text-sm text-gray-500">
                   View and manage customer orders.
+                </p>
+              </Link>
+
+              <Link
+                to="/seller/store-profile"
+                className="rounded-xl border bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+              >
+                <h4 className="text-lg font-bold text-gray-800">
+                  Store Profile
+                </h4>
+                <p className="mt-2 text-sm text-gray-500">
+                  Update your store name, description, phone, and address.
                 </p>
               </Link>
 
