@@ -154,10 +154,30 @@ const deleteProduct = async (req, res) => {
   }
 };
 
+
+const getMyProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      seller: req.user._id,
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      count: products.length,
+      products,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to retrieve your products.",
+    });
+  }
+};
+
+
 module.exports = {
   createProduct,
   getProducts,
   getProductById,
   updateProduct,
   deleteProduct,
+  getMyProducts,
 };

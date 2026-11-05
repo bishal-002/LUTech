@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/api/products";
+const API_URL = "http://localhost:5000/api/products/mine";
 
 function SellerProducts() {
   const navigate = useNavigate();

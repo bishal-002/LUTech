@@ -7,6 +7,7 @@ const {
   getProductById,
   updateProduct,
   deleteProduct,
+  getMyProducts,
 } = require("../controllers/productController");
 
 const {
@@ -28,6 +29,7 @@ const adminOrSeller = (req, res, next) => {
 
 // Public routes
 router.get("/", getProducts);
+router.get("/mine", protect, sellerOnly, getMyProducts);
 router.get("/:id", getProductById);
 
 // Admin or approved Seller routes
