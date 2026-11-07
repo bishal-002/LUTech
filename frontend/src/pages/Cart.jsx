@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import axios from "axios";
 
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -27,6 +28,13 @@ function Cart() {
   const [cartItems, setCartItems] = useState(readCart);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  const [shippingName, setShippingName] = useState("");
+  const [shippingPhone, setShippingPhone] = useState("");
+  const [shippingAddress, setShippingAddress] = useState("");
+
+  const [submitting, setSubmitting] = useState(false);
+  const [orderResult, setOrderResult] = useState(null);
 
   useEffect(() => {
     localStorage.setItem(CART_KEY, JSON.stringify(cartItems));
@@ -63,19 +71,75 @@ function Cart() {
     return total + price * quantity;
   }, 0);
 
-  const handleCheckout = () => {
+
+  const handleCheckout = async (e) => {
+    e.preventDefault();
+    if (submitting) return;
+
     setMessage("");
     setError("");
+    setOrderResult(null);
 
     if (cartItems.length === 0) {
-      setError("Your cart is empty. Add products before checkout.");
+      setError("Your cart is empty.");
       return;
     }
 
-    setMessage(
-      "Demo checkout selected. No order has been placed yet. Cash on Delivery order processing will be connected when the order API is implemented."
-    );
+    if (
+      !shippingName.trim() ||
+      !shippingPhone.trim() ||
+      !shippingAddress.trim()
+    ) {
+      setError("Please complete all shipping details.");
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      setError("Please log in as a customer before checkout.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const response = await axios.post(
+        "http://localhost:5000/api/orders/checkout",
+        {
+          items: cartItems.map((item) => ({
+            productId: item.productId,
+            quantity: Number(item.quantity),
+          })),
+          shippingName: shippingName.trim(),
+          shippingPhone: shippingPhone.trim(),
+          shippingAddress: shippingAddress.trim(),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      setOrderResult(response.data);
+
+      // Clear cart only after successful order creation.
+      setCartItems([]);
+      localStorage.removeItem(CART_KEY);
+
+      setMessage("Your order has been placed successfully!");
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+        "Unable to place your order. Please try again."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
+
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
@@ -113,6 +177,45 @@ function Cart() {
             {error}
           </div>
         )}
+
+
+        {orderResult && (
+          <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-5">
+            <h2 className="text-xl font-bold text-green-800">
+              Order Placed Successfully!
+            </h2>
+
+            <p className="mt-2 text-sm text-green-700">
+              Your Cash on Delivery order has been confirmed.
+            </p>
+
+            <p className="mt-3 font-semibold text-green-800">
+              Total Orders: {orderResult.count}
+            </p>
+
+            <div className="mt-4 space-y-3">
+              {orderResult.orders?.map((order) => (
+                <div
+                  key={order._id}
+                  className="rounded-lg bg-white p-3 text-sm"
+                >
+                  <p className="font-semibold text-slate-800">
+                    Order ID: {order._id}
+                  </p>
+
+                  <p className="mt-1 text-slate-600">
+                    Total: {formatPrice(order.totalAmount)}
+                  </p>
+
+                  <p className="text-slate-600">
+                    Payment: Cash on Delivery
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
 
         {cartItems.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
@@ -202,7 +305,7 @@ function Cart() {
                         <p className="shrink-0 font-bold text-slate-900">
                           {formatPrice(
                             (Number(item.price) || 0) *
-                              (Number(item.quantity) || 0)
+                            (Number(item.quantity) || 0)
                           )}
                         </p>
                       </div>
@@ -334,21 +437,80 @@ function Cart() {
                 </p>
 
                 <p className="mt-1 text-sm text-slate-600">
-                  Cash on Delivery (demo)
+                  Cash on Delivery
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={handleCheckout}
-                className="mt-6 w-full rounded-lg bg-blue-700 px-5 py-3.5 font-semibold text-white shadow-sm transition hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-200"
-              >
-                Proceed to Checkout
-              </button>
 
-              <p className="mt-3 text-center text-xs leading-5 text-slate-500">
-                Demo checkout only. An order is not created at this stage.
-              </p>
+              <form onSubmit={handleCheckout} className="mt-6 space-y-4">
+
+                <h3 className="text-lg font-bold text-slate-900">
+                  Delivery Information
+                </h3>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={shippingName}
+                    onChange={(e) => setShippingName(e.target.value)}
+                    placeholder="Enter your full name"
+                    required
+                    maxLength={100}
+                    className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Phone Number *
+                  </label>
+                  <input
+                    type="tel"
+                    value={shippingPhone}
+                    onChange={(e) => setShippingPhone(e.target.value)}
+                    placeholder="Enter your phone number"
+                    required
+                    maxLength={20}
+                    className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Delivery Address *
+                  </label>
+                  <textarea
+                    value={shippingAddress}
+                    onChange={(e) => setShippingAddress(e.target.value)}
+                    placeholder="Enter your complete delivery address"
+                    rows={3}
+                    required
+                    maxLength={500}
+                    className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submitting || cartItems.length === 0}
+                  className="w-full rounded-lg bg-blue-700 px-5 py-3.5 font-semibold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {submitting
+                    ? "Placing Order..."
+                    : "Place Order (Cash on Delivery)"}
+                </button>
+
+                <p className="text-center text-xs text-slate-500">
+                  Payment will be collected upon delivery.
+                </p>
+
+              </form>
+
+
+              
             </aside>
           </div>
         )}
