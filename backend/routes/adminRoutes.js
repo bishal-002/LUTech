@@ -16,6 +16,12 @@ const {
   adminOnly,
 } = require("../middleware/authMiddleware");
 
+const {
+  getAllOrders,
+  getAdminOrderById,
+  updateAdminOrderStatus,
+} = require("../controllers/orderController");
+
 const router = express.Router();
 
 // All routes require Admin authentication
@@ -31,5 +37,10 @@ router.delete("/users/:id", deleteUser);
 router.get("/sellers", getSellerApplications);
 router.put("/sellers/:id/approve", approveSeller);
 router.put("/sellers/:id/reject", rejectSeller);
+
+// Admin Order Management
+router.get("/orders", getAllOrders);
+router.get("/orders/:id", getAdminOrderById);
+router.put("/orders/:id/status", updateAdminOrderStatus);
 
 module.exports = router;

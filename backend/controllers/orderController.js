@@ -263,10 +263,111 @@ const createCustomerOrder = async (req, res) => {
   }
 };
 
+// Get all orders (Admin)
+const getAllOrders = async (req, res) => {
+  try {
+    const { status } = req.query;
+
+    const filter = {};
+
+    if (status && status !== "all") {
+      filter.status = status;
+    }
+
+    const orders = await Order.find(filter)
+      .populate("customerId", "name email")
+      .populate("sellerId", "name email storeName role")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      count: orders.length,
+      orders,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to retrieve orders.",
+    });
+  }
+};
+
+
+// Get single order details (Admin)
+const getAdminOrderById = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate("customerId", "name email")
+      .populate("sellerId", "name email storeName role");
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found.",
+      });
+    }
+
+    res.status(200).json({ order });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to retrieve order details.",
+    });
+  }
+};
+
+
+// Update order status (Admin)
+const updateAdminOrderStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    const allowedStatuses = [
+      "pending",
+      "confirmed",
+      "processing",
+      "shipped",
+      "delivered",
+      "cancelled",
+    ];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        message: "Invalid order status.",
+      });
+    }
+
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found.",
+      });
+    }
+
+    if (["delivered", "cancelled"].includes(order.status)) {
+      return res.status(400).json({
+        message: "This order can no longer be updated.",
+      });
+    }
+
+    order.status = status;
+    await order.save();
+
+    res.status(200).json({
+      message: "Order status updated successfully.",
+      order,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to update order status.",
+    });
+  }
+};
+
 
 module.exports = {
   getSellerOrders,
   getSellerOrderById,
   updateSellerOrderStatus,
   createCustomerOrder,
+  getAllOrders,
+  getAdminOrderById,
+  updateAdminOrderStatus,
 };
