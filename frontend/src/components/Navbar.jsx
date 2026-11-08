@@ -36,6 +36,13 @@ function Navbar() {
             Products
           </Link>
 
+          <Link
+            to="/my-orders"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-blue-700"
+          >
+            My Orders
+          </Link>
+
           {!userInfo ? (
             <>
               <Link

@@ -21,6 +21,7 @@ import SellerProductForm from "./pages/SellerProductForm";
 import SellerOrders from "./pages/SellerOrders";
 import SellerStoreProfile from "./pages/SellerStoreProfile";
 import AdminOrders from "./pages/AdminOrders";  
+import CustomerOrders from "./pages/CustomerOrders";
 
 function App() {
   return (
@@ -41,6 +42,7 @@ function App() {
         <Route path="/seller/orders" element={<SellerOrders />} />
         <Route path="/seller/store-profile" element={<SellerStoreProfile />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
+        <Route path="/my-orders" element={<CustomerOrders />} />
 
 
         <Route path="/admin/login" element={<AdminLogin />} />
