@@ -362,6 +362,63 @@ const updateAdminOrderStatus = async (req, res) => {
 };
 
 
+// Get all orders belonging to the logged-in customer
+const getCustomerOrders = async (req, res) => {
+  try {
+    if (req.user.role !== "customer") {
+      return res.status(403).json({
+        message: "Only customers can access their orders.",
+      });
+    }
+
+    const orders = await Order.find({
+      customerId: req.user._id,
+    })
+      .populate("sellerId", "name email storeName role")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      count: orders.length,
+      orders,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to retrieve your orders.",
+    });
+  }
+};
+
+
+// Get details of a specific customer order
+const getCustomerOrderById = async (req, res) => {
+  try {
+    if (req.user.role !== "customer") {
+      return res.status(403).json({
+        message: "Only customers can access their orders.",
+      });
+    }
+
+    const order = await Order.findOne({
+      _id: req.params.id,
+      customerId: req.user._id,
+    }).populate("sellerId", "name email storeName role");
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found.",
+      });
+    }
+
+    res.status(200).json({ order });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to retrieve order details.",
+    });
+  }
+};
+
+
+
 module.exports = {
   getSellerOrders,
   getSellerOrderById,
@@ -370,4 +427,6 @@ module.exports = {
   getAllOrders,
   getAdminOrderById,
   updateAdminOrderStatus,
+  getCustomerOrders,
+  getCustomerOrderById,
 };
