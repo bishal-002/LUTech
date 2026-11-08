@@ -67,6 +67,13 @@ function AdminDashboard() {
           >
             User Management
           </Link>
+          <Link
+            to="/admin/orders"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-blue-600"
+          >
+            Orders
+          </Link>
+
 
           <div className="flex items-center gap-3">
             <span className="hidden text-sm text-slate-600 sm:inline">
@@ -162,6 +169,12 @@ function AdminDashboard() {
               className="rounded-lg bg-slate-100 px-4 py-3 text-sm font-semibold hover:bg-slate-200"
             >
               View storefront →
+            </Link>
+            <Link
+              to="/admin/orders"
+              className="rounded-lg bg-slate-100 px-4 py-3 text-sm font-semibold hover:bg-slate-200"
+            >
+              Manage all orders →
             </Link>
           </div>
         </section>

@@ -20,6 +20,7 @@ import SellerProducts from "./pages/SellerProducts";
 import SellerProductForm from "./pages/SellerProductForm";
 import SellerOrders from "./pages/SellerOrders";
 import SellerStoreProfile from "./pages/SellerStoreProfile";
+import AdminOrders from "./pages/AdminOrders";  
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
         <Route path="/seller/products/edit/:id" element={<SellerProductForm />} />
         <Route path="/seller/orders" element={<SellerOrders />} />
         <Route path="/seller/store-profile" element={<SellerStoreProfile />} />
+        <Route path="/admin/orders" element={<AdminOrders />} />
 
 
         <Route path="/admin/login" element={<AdminLogin />} />
