@@ -152,6 +152,7 @@ const loginUser = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role || "customer",
+        sellerStatus: user.sellerStatus || "not_applicable",
         isVerified: user.isVerified,
       },
     });
