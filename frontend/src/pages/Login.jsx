@@ -62,9 +62,27 @@ function Login() {
 
       setMessage(response.message);
 
-      setTimeout(() => {
-        navigate("/");
-      }, 1500);
+      const loggedInUser = response.user;
+
+      // Role-based redirection
+      if (loggedInUser.role === "admin") {
+        navigate("/admin/dashboard", { replace: true });
+      } else if (
+        loggedInUser.role === "seller" &&
+        loggedInUser.sellerStatus === "approved"
+      ) {
+        navigate("/seller/dashboard", { replace: true });
+      } else if (loggedInUser.role === "seller") {
+        setMessage(
+          "Login successful. Your seller application is awaiting Admin approval."
+        );
+
+        setTimeout(() => {
+          navigate("/", { replace: true });
+        }, 2000);
+      } else {
+        navigate("/", { replace: true });
+      }
     } catch (err) {
       setError(
         err.response?.data?.message || "Login failed"
