@@ -75,6 +75,29 @@ const userSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    sellerApplication: {
+      reason: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+
+      submittedAt: {
+        type: Date,
+        default: null,
+      },
+
+      reviewedAt: {
+        type: Date,
+        default: null,
+      },
+
+      reviewNote: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+    },
   },
   {
     timestamps: true,
