@@ -394,6 +394,116 @@ const updateSellerProfile = async (req, res) => {
 };
 
 
+const applyToBecomeSeller = async (req, res) => {
+  try {
+    const {
+      storeName,
+      storeDescription,
+      storePhone,
+      storeAddress,
+      reason,
+    } = req.body;
+
+    if (
+      !storeName?.trim() ||
+      !storePhone?.trim() ||
+      !storeAddress?.trim() ||
+      !reason?.trim()
+    ) {
+      return res.status(400).json({
+        message: "Store name, phone, address, and application reason are required",
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    if (user.role !== "customer") {
+      return res.status(403).json({
+        message: "Only customers can apply to become sellers",
+      });
+    }
+
+    if (!user.isVerified) {
+      return res.status(403).json({
+        message: "Please verify your email before applying",
+      });
+    }
+
+    if (user.sellerStatus === "pending") {
+      return res.status(400).json({
+        message: "You already have a pending seller application",
+      });
+    }
+
+    user.storeName = storeName.trim();
+    user.storeDescription = storeDescription?.trim() || "";
+    user.storePhone = storePhone.trim();
+    user.storeAddress = storeAddress.trim();
+
+    user.sellerStatus = "pending";
+
+    user.sellerApplication = {
+      reason: reason.trim(),
+      submittedAt: new Date(),
+      reviewedAt: null,
+      reviewNote: "",
+    };
+
+    await user.save();
+
+    return res.status(201).json({
+      message: "Seller application submitted successfully",
+      sellerStatus: user.sellerStatus,
+    });
+  } catch (error) {
+    console.error("Seller application error:", error);
+
+    return res.status(500).json({
+      message: "Failed to submit seller application",
+    });
+  }
+};
+
+
+const getSellerApplicationStatus = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select(
+      "role sellerStatus sellerApplication storeName storeDescription storePhone storeAddress"
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    return res.status(200).json({
+      role: user.role,
+      sellerStatus: user.sellerStatus || "not_applicable",
+      application: user.sellerApplication || null,
+      store: {
+        storeName: user.storeName,
+        storeDescription: user.storeDescription,
+        storePhone: user.storePhone,
+        storeAddress: user.storeAddress,
+      },
+    });
+  } catch (error) {
+    console.error("Get seller application status error:", error);
+
+    return res.status(500).json({
+      message: "Failed to retrieve application status",
+    });
+  }
+};
+
+
 
 //export function
 module.exports = {
@@ -404,5 +514,7 @@ module.exports = {
   deleteUserProfile,
   verifyOTP,
   getSellerProfile,
-  updateSellerProfile
+  updateSellerProfile,
+  applyToBecomeSeller,
+  getSellerApplicationStatus,
 };

@@ -200,85 +200,115 @@ const deleteUser = async (req, res) => {
 };
 
 
+
 const getSellerApplications = async (req, res) => {
   try {
-    const sellers = await User.find({
-      role: "seller",
-      sellerStatus: "pending"
-    }).select("_id name email isVerified sellerStatus createdAt");
+    const applicants = await User.find({
+      $or: [
+        { role: "seller", sellerStatus: "pending" },
+        { role: "customer", sellerStatus: "pending" },
+      ],
+    }).select(
+      "_id name email role isVerified sellerStatus storeName storeDescription storePhone storeAddress sellerApplication createdAt"
+    );
 
     return res.status(200).json({
-      count: sellers.length,
-      sellers
+      count: applicants.length,
+      applicants,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Get seller applications error:", error);
     return res.status(500).json({
-      message: "Server Error"
+      message: "Failed to retrieve seller applications",
     });
   }
 };
 
 const approveSeller = async (req, res) => {
   try {
-    const seller = await User.findOneAndUpdate(
-      {
-        _id: req.params.id,
-        role: "seller",
-        sellerStatus: "pending",
-        isVerified: true
-      },
-      { sellerStatus: "approved" },
-      { new: true }
-    ).select("_id name email role sellerStatus");
+    const applicant = await User.findById(req.params.id);
 
-    if (!seller) {
-      return res.status(400).json({
-        message: "Seller not found, not verified, or already processed"
+    if (
+      !applicant ||
+      applicant.sellerStatus !== "pending" ||
+      !["customer", "seller"].includes(applicant.role)
+    ) {
+      return res.status(404).json({
+        message: "Pending seller application not found",
       });
     }
 
+    if (!applicant.isVerified) {
+      return res.status(400).json({
+        message: "Applicant must verify their email first",
+      });
+    }
+
+    // Convert an approved customer applicant into a seller.
+    applicant.role = "seller";
+    applicant.sellerStatus = "approved";
+    applicant.sellerApplication.reviewedAt = new Date();
+
+    await applicant.save();
+
     return res.status(200).json({
-      message: "Seller approved successfully",
-      seller
+      message: "Seller application approved successfully",
+      seller: {
+        _id: applicant._id,
+        name: applicant.name,
+        email: applicant.email,
+        role: applicant.role,
+        sellerStatus: applicant.sellerStatus,
+      },
     });
   } catch (error) {
-    console.error(error);
+    console.error("Approve seller error:", error);
     return res.status(500).json({
-      message: "Server Error"
+      message: "Failed to approve seller application",
     });
   }
 };
 
 const rejectSeller = async (req, res) => {
   try {
-    const seller = await User.findOneAndUpdate(
-      {
-        _id: req.params.id,
-        role: "seller",
-        sellerStatus: "pending"
-      },
-      { sellerStatus: "rejected" },
-      { new: true }
-    ).select("_id name email role sellerStatus");
+    const applicant = await User.findById(req.params.id);
 
-    if (!seller) {
+    if (
+      !applicant ||
+      applicant.sellerStatus !== "pending" ||
+      !["customer", "seller"].includes(applicant.role)
+    ) {
       return res.status(404).json({
-        message: "Pending seller application not found"
+        message: "Pending seller application not found",
       });
     }
 
+    applicant.sellerStatus = "rejected";
+
+    // A customer remains a customer if their application is rejected.
+    // An existing seller registration remains a seller.
+    applicant.sellerApplication.reviewedAt = new Date();
+
+    await applicant.save();
+
     return res.status(200).json({
       message: "Seller application rejected",
-      seller
+      applicant: {
+        _id: applicant._id,
+        name: applicant.name,
+        email: applicant.email,
+        role: applicant.role,
+        sellerStatus: applicant.sellerStatus,
+      },
     });
   } catch (error) {
-    console.error(error);
+    console.error("Reject seller error:", error);
     return res.status(500).json({
-      message: "Server Error"
+      message: "Failed to reject seller application",
     });
   }
 };
+
 
 
 module.exports = {
