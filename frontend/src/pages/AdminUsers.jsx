@@ -56,6 +56,10 @@ const AdminUsers = () => {
   const [deleting, setDeleting] = useState(false);
 
   const currentUserId = getCurrentUserId();
+  const [applications, setApplications] = useState([]);
+  const [applicationsLoading, setApplicationsLoading] = useState(true);
+  const [applicationError, setApplicationError] = useState("");
+  const [processingApplicationId, setProcessingApplicationId] = useState(null);
 
   // Fetch users
   const fetchUsers = useCallback(async () => {
@@ -95,8 +99,32 @@ const AdminUsers = () => {
     } catch (err) {
       setActionError(
         err.response?.data?.message ||
-          "Failed to load user statistics."
+        "Failed to load user statistics."
       );
+    }
+  }, []);
+
+  // Fetch pending seller applications
+  const fetchApplications = useCallback(async () => {
+    try {
+      setApplicationsLoading(true);
+      setApplicationError("");
+
+      const response = await axios.get(
+        `${API_URL}/sellers`,
+        getAuthConfig()
+      );
+
+      setApplications(
+        response.data.applicants || response.data.sellers || []
+      );
+    } catch (err) {
+      setApplicationError(
+        err.response?.data?.message ||
+        "Failed to load seller applications."
+      );
+    } finally {
+      setApplicationsLoading(false);
     }
   }, []);
 
@@ -107,6 +135,70 @@ const AdminUsers = () => {
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
+
+  useEffect(() => {
+    fetchApplications();
+  }, [fetchApplications]);
+
+  // Approve seller application
+  const handleApproveApplication = async (applicantId) => {
+    try {
+      setProcessingApplicationId(applicantId);
+      setActionError("");
+
+      await axios.put(
+        `${API_URL}/sellers/${applicantId}/approve`,
+        {},
+        getAuthConfig()
+      );
+
+      await Promise.all([
+        fetchApplications(),
+        fetchUsers(),
+        fetchStats(),
+      ]);
+    } catch (err) {
+      setActionError(
+        err.response?.data?.message ||
+        "Failed to approve seller application."
+      );
+    } finally {
+      setProcessingApplicationId(null);
+    }
+  };
+
+  // Reject seller application
+  const handleRejectApplication = async (applicantId) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to reject this seller application?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setProcessingApplicationId(applicantId);
+      setActionError("");
+
+      await axios.put(
+        `${API_URL}/sellers/${applicantId}/reject`,
+        {},
+        getAuthConfig()
+      );
+
+      await Promise.all([
+        fetchApplications(),
+        fetchUsers(),
+        fetchStats(),
+      ]);
+    } catch (err) {
+      setActionError(
+        err.response?.data?.message ||
+        "Failed to reject seller application."
+      );
+    } finally {
+      setProcessingApplicationId(null);
+    }
+  };
 
   // Update user role
   const handleRoleChange = async (userId, newRole) => {
@@ -124,7 +216,7 @@ const AdminUsers = () => {
     } catch (err) {
       setActionError(
         err.response?.data?.message ||
-          "Failed to update user role."
+        "Failed to update user role."
       );
     } finally {
       setSavingUserId(null);
@@ -158,7 +250,7 @@ const AdminUsers = () => {
     } catch (err) {
       setActionError(
         err.response?.data?.message ||
-          "Failed to delete user."
+        "Failed to delete user."
       );
     } finally {
       setDeleting(false);
@@ -219,6 +311,182 @@ const AdminUsers = () => {
             color="text-purple-600"
             icon="🛡️"
           />
+        </div>
+
+        {/* Seller Applications */}
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-2 border-b border-gray-200 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Seller Applications
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Review and manage customer requests to become sellers.
+              </p>
+            </div>
+
+            <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">
+              {applications.length} Pending
+            </span>
+          </div>
+
+          {applicationsLoading ? (
+            <div className="p-10 text-center text-gray-500">
+              Loading seller applications...
+            </div>
+          ) : applicationError ? (
+            <div className="p-8 text-center text-red-600">
+              <p>{applicationError}</p>
+              <button
+                onClick={fetchApplications}
+                className="mt-3 font-semibold underline"
+              >
+                Try Again
+              </button>
+            </div>
+          ) : applications.length === 0 ? (
+            <div className="p-10 text-center">
+              <p className="font-medium text-gray-700">
+                No pending seller applications.
+              </p>
+              <p className="mt-1 text-sm text-gray-500">
+                New applications will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {applications.map((applicant) => {
+                const isProcessing =
+                  processingApplicationId === applicant._id;
+
+                return (
+                  <div
+                    key={applicant._id}
+                    className="p-5 transition hover:bg-gray-50"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold text-gray-900">
+                            {applicant.name}
+                          </h3>
+
+                          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+                            Pending
+                          </span>
+
+                          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                            {applicant.role === "customer"
+                              ? "Customer Application"
+                              : "Seller Registration"}
+                          </span>
+                        </div>
+
+                        <p className="mt-1 text-sm text-gray-500">
+                          {applicant.email}
+                        </p>
+
+                        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                          <div>
+                            <p className="text-gray-500">Store Name</p>
+                            <p className="mt-1 font-medium text-gray-800">
+                              {applicant.storeName || "Not provided"}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-gray-500">Business Phone</p>
+                            <p className="mt-1 font-medium text-gray-800">
+                              {applicant.storePhone || "Not provided"}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-gray-500">Business Address</p>
+                            <p className="mt-1 font-medium text-gray-800">
+                              {applicant.storeAddress || "Not provided"}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-gray-500">Email Verification</p>
+                            <p className={`mt-1 font-medium ${applicant.isVerified
+                                ? "text-green-600"
+                                : "text-red-600"
+                              }`}>
+                              {applicant.isVerified
+                                ? "Verified"
+                                : "Not Verified"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {applicant.storeDescription && (
+                          <div className="mt-4">
+                            <p className="text-sm text-gray-500">
+                              Store Description
+                            </p>
+                            <p className="mt-1 text-sm text-gray-700">
+                              {applicant.storeDescription}
+                            </p>
+                          </div>
+                        )}
+
+                        {applicant.sellerApplication?.reason && (
+                          <div className="mt-4 rounded-lg bg-gray-50 p-4">
+                            <p className="text-sm font-semibold text-gray-700">
+                              Application Reason
+                            </p>
+                            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-600">
+                              {applicant.sellerApplication.reason}
+                            </p>
+                          </div>
+                        )}
+
+                        <p className="mt-3 text-xs text-gray-400">
+                          Submitted:{" "}
+                          {applicant.sellerApplication?.submittedAt
+                            ? new Date(
+                              applicant.sellerApplication.submittedAt
+                            ).toLocaleDateString()
+                            : new Date(
+                              applicant.createdAt
+                            ).toLocaleDateString()}
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 gap-2 lg:flex-col">
+                        <button
+                          onClick={() =>
+                            handleApproveApplication(applicant._id)
+                          }
+                          disabled={isProcessing || !applicant.isVerified}
+                          title={
+                            !applicant.isVerified
+                              ? "Applicant must verify their email first"
+                              : "Approve application"
+                          }
+                          className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {isProcessing ? "Processing..." : "Approve"}
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleRejectApplication(applicant._id)
+                          }
+                          disabled={isProcessing}
+                          className="rounded-lg bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Error Message */}
@@ -369,11 +637,10 @@ const AdminUsers = () => {
                           {/* Verification */}
                           <td className="px-6 py-4">
                             <span
-                              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                                user.isVerified
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-yellow-100 text-yellow-700"
-                              }`}
+                              className={`rounded-full px-3 py-1 text-xs font-medium ${user.isVerified
+                                ? "bg-green-100 text-green-700"
+                                : "bg-yellow-100 text-yellow-700"
+                                }`}
                             >
                               {user.isVerified
                                 ? "Verified"
