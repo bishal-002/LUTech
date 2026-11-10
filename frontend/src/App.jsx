@@ -27,6 +27,8 @@ import CustomerOrders from "./pages/CustomerOrders";
 import AdminRoute from "./components/AdminRoute";
 import ProtectedRoute from "./components/ProtectedRoute";
 
+import BecomeSeller from "./pages/BecomeSeller";
+
 function App() {
   return (
     <BrowserRouter>
@@ -45,6 +47,7 @@ function App() {
           <Route path="/cart" element={<Cart />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/my-orders" element={<CustomerOrders />} />
+          <Route path="/become-seller" element={<BecomeSeller />} />
         </Route>
 
         {/* Seller Routes */}

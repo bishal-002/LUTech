@@ -80,6 +80,10 @@ function Navbar() {
                     Cart
                   </Link>
 
+                  <Link to="/become-seller" className={linkStyle}>
+                    Become a Seller
+                  </Link>
+
                   <Link
                     to="/profile"
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
