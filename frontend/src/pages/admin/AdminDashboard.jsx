@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { getProducts } from "../services/productService";
+import { getProducts } from "../../services/productService";
 
 function AdminDashboard() {
   const navigate = useNavigate();

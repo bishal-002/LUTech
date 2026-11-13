@@ -4,13 +4,35 @@
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", sans-serif;
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  color: #172033;
-  background: #f8fafc;
+  --color-background: #F4F6F4;
+  --color-primary: #1A2E26;
+  --color-accent: #E07A5F;
+  --color-text: #20332B;
+  --color-muted: #68766F;
+
+  --color-surface: #FFFFFF;
+  --color-border: #E5E9E5;
+  --color-surface-muted: #EBF0EB;
+
+  --color-accent-dark: #B9533B;
+  --color-success: #287A50;
+  --color-warning: #A16207;
+  --color-danger: #B42318;
+
+  --radius-card: 12px;
+  --radius-button: 8px;
+
+  --shadow-card: 0 2px 8px rgba(26, 46, 38, 0.04);
+  --shadow-hover: 0 8px 20px rgba(26, 46, 38, 0.09);
+
+  color: var(--color-text);
+  background: var(--color-background);
 }
 
 * {
@@ -18,19 +40,31 @@
 }
 
 html {
+  width: 100%;
+  max-width: 100%;
   min-width: 320px;
+  overflow-x: clip;
   scroll-behavior: smooth;
+  scroll-padding-top: 90px;
 }
 
 body {
-  margin: 0;
+  width: 100%;
+  max-width: 100%;
   min-width: 320px;
   min-height: 100vh;
+  margin: 0;
+  overflow-x: clip;
+  background: var(--color-background);
+  color: var(--color-text);
 }
 
 #root {
-  min-height: 100vh;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  overflow-x: clip;
 }
 
 button,
@@ -40,12 +74,207 @@ select {
   font: inherit;
 }
 
+input,
+textarea,
+select {
+  color: var(--color-text);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-muted);
+  opacity: 0.8;
+}
+
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  text-decoration: none;
 }
 
 img {
   display: block;
   max-width: 100%;
 }
+
+::selection {
+  background: #DCE8DF;
+  color: #1A2E26;
+}
+
+:focus-visible {
+  outline: 2px solid #B9533B;
+  outline-offset: 3px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(104, 118, 111, 0.35);
+  border-radius: 20px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(104, 118, 111, 0.65);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(104, 118, 111, 0.4) transparent;
+}
+
+.page-container {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-inline: 24px;
+}
+
+@media (max-width: 640px) {
+  .page-container {
+    padding-inline: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    outline: 2px solid red;
+  }
+
+  #root {
+    outline: 2px solid blue;
+  }
+}
+
+
+/* Profile page mobile width correction */
+.profile-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.profile-page > main {
+  width: 100%;
+  max-width: 1440px;
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.profile-page main,
+.profile-page main > div,
+.profile-page aside,
+.profile-page aside > div,
+.profile-page main section,
+.profile-page form {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .profile-page {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .profile-page > main {
+    width: 100%;
+    max-width: 100%;
+    padding-left: 16px;
+    padding-right: 16px;
+    margin: 0;
+  }
+
+  .profile-page aside,
+  .profile-page aside > div,
+  .profile-page main section {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .profile-page p,
+  .profile-page a,
+  .profile-page span {
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Global mobile viewport alignment fix */
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  overflow-x: clip !important;
+}
+
+#root {
+  position: relative;
+  left: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  overflow-x: clip !important;
+}
+
+/* Prevent profile content from being horizontally displaced */
+.profile-page {
+  position: relative;
+  left: 0;
+  right: auto;
+  transform: none !important;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  overflow-x: clip;
+}
+
+@media (max-width: 640px) {
+  .profile-page > main {
+    position: relative;
+    left: 0;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+}
+

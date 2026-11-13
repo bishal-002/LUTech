@@ -5,7 +5,7 @@ import {
   createProduct,
   getProductById,
   updateProduct,
-} from "../services/productService";
+} from "../../services/productService";
 
 const initialFormData = {
   name: "",

@@ -1,16 +1,17 @@
 
 import { Navigate, Outlet } from "react-router-dom";
 
+function getUserInfo() {
+  try {
+    return JSON.parse(localStorage.getItem("userInfo") || "null");
+  } catch {
+    return null;
+  }
+}
+
 function ProtectedRoute({ allowedRoles }) {
   const token = localStorage.getItem("token");
-
-  let userInfo;
-
-  try {
-    userInfo = JSON.parse(localStorage.getItem("userInfo") || "null");
-  } catch {
-    userInfo = null;
-  }
+  const userInfo = getUserInfo();
 
   if (!token || !userInfo) {
     return <Navigate to="/login" replace />;
@@ -22,7 +23,16 @@ function ProtectedRoute({ allowedRoles }) {
     }
 
     if (userInfo.role === "seller") {
-      return <Navigate to="/seller/dashboard" replace />;
+      return (
+        <Navigate
+          to={
+            userInfo.sellerStatus === "approved"
+              ? "/seller/home"
+              : "/seller/pending"
+          }
+          replace
+        />
+      );
     }
 
     return <Navigate to="/" replace />;
@@ -32,7 +42,7 @@ function ProtectedRoute({ allowedRoles }) {
     userInfo.role === "seller" &&
     userInfo.sellerStatus !== "approved"
   ) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/seller/pending" replace />;
   }
 
   return <Outlet />;

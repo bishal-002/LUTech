@@ -1,14 +1,15 @@
+
 import { Navigate, Outlet } from "react-router-dom";
 
 function AdminRoute() {
   const token = localStorage.getItem("token");
 
-  let userInfo;
+  let userInfo = null;
 
   try {
     userInfo = JSON.parse(localStorage.getItem("userInfo"));
   } catch {
-    return <Navigate to="/" replace />;
+    userInfo = null;
   }
 
   if (!token || !userInfo) {

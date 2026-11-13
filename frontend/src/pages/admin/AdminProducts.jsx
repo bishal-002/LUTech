@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import {
   getProducts,
   deleteProduct,
-} from "../services/productService";
+} from "../../services/productService";
 
 function AdminProducts() {
   const [products, setProducts] = useState([]);
