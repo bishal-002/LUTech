@@ -1,11 +1,43 @@
+
 const mongoose = require("mongoose");
+
+const sellerApplicationSchema = new mongoose.Schema(
+  {
+    reason: {
+      type: String,
+      trim: true,
+      maxlength: 2000,
+      default: "",
+    },
+
+    submittedAt: {
+      type: Date,
+      default: null,
+    },
+
+    reviewedAt: {
+      type: Date,
+      default: null,
+    },
+
+    reviewNote: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: "",
+    },
+  },
+  { _id: false }
+);
 
 const userSchema = new mongoose.Schema(
   {
+    // Basic account information
     name: {
       type: String,
       required: true,
       trim: true,
+      maxlength: 100,
     },
 
     email: {
@@ -14,6 +46,11 @@ const userSchema = new mongoose.Schema(
       unique: true,
       trim: true,
       lowercase: true,
+      maxlength: 254,
+      match: [
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+        "Please provide a valid email address.",
+      ],
     },
 
     password: {
@@ -21,6 +58,7 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
 
+    // Account role
     role: {
       type: String,
       enum: ["customer", "seller", "admin"],
@@ -28,23 +66,24 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
 
+    // Seller approval status
     sellerStatus: {
       type: String,
       enum: ["not_applicable", "pending", "approved", "rejected"],
       default: "not_applicable",
     },
 
+    // OTP verification
     otp: {
       type: String,
+      default: undefined,
+      select: false,
     },
 
     otpExpires: {
       type: Date,
-    },
-
-    address: {
-      type: String,
-      default: "",
+      default: undefined,
+      select: false,
     },
 
     isVerified: {
@@ -52,51 +91,48 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Customer address
+    address: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: "",
+    },
+
+    // Seller store information
     storeName: {
       type: String,
       trim: true,
+      maxlength: 120,
       default: "",
     },
 
     storeDescription: {
       type: String,
       trim: true,
+      maxlength: 2000,
       default: "",
     },
 
     storePhone: {
       type: String,
       trim: true,
+      maxlength: 25,
       default: "",
     },
 
     storeAddress: {
       type: String,
       trim: true,
+      maxlength: 500,
       default: "",
     },
+
+    // Legacy embedded seller application information.
+    // Retained for compatibility with existing controllers.
     sellerApplication: {
-      reason: {
-        type: String,
-        trim: true,
-        default: "",
-      },
-
-      submittedAt: {
-        type: Date,
-        default: null,
-      },
-
-      reviewedAt: {
-        type: Date,
-        default: null,
-      },
-
-      reviewNote: {
-        type: String,
-        trim: true,
-        default: "",
-      },
+      type: sellerApplicationSchema,
+      default: () => ({}),
     },
   },
   {
@@ -104,4 +140,25 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("User", userSchema);
+// Normalize account information before validation.
+userSchema.pre("validate", function () {
+  if (this.name) {
+    this.name = this.name.trim();
+  }
+
+  if (this.email) {
+    this.email = this.email.trim().toLowerCase();
+  }
+
+  if (this.storeName) {
+    this.storeName = this.storeName.trim();
+  }
+});
+
+// Useful indexes for seller and admin management.
+userSchema.index({ role: 1, sellerStatus: 1 });
+userSchema.index({ createdAt: -1 });
+
+module.exports =
+  mongoose.models.User ||
+  mongoose.model("User", userSchema);

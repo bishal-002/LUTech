@@ -12,7 +12,6 @@ const {
 
 const {
   protect,
-  adminOnly,
   sellerOnly,
 } = require("../middleware/authMiddleware");
 
