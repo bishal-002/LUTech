@@ -1,5 +1,11 @@
 
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+} from "react-router-dom";
 
 // Public / Customer Pages
 import Home from "./pages/public/Home";
@@ -32,11 +38,10 @@ import ProtectedRoute from "./components/ProtectedRoute";
 
 // Admin Pages
 import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminProducts from "./pages/admin/AdminProducts";
-import ProductForm from "./pages/admin/ProductForm";
 import AdminUsers from "./pages/admin/AdminUsers";
-import AdminOrders from "./pages/admin/AdminOrders";
+import AdminSellerApplications from "./pages/admin/AdminSellerApplications";
 
+// Get logged-in user information
 function getUserInfo() {
   try {
     return JSON.parse(localStorage.getItem("userInfo") || "null");
@@ -45,8 +50,11 @@ function getUserInfo() {
   }
 }
 
+// Redirect users according to their roles
 function getRoleDestination(user) {
-  if (user?.role === "admin") return "/admin/dashboard";
+  if (user?.role === "admin") {
+    return "/admin/dashboard";
+  }
 
   if (user?.role === "seller") {
     return user.sellerStatus === "approved"
@@ -57,7 +65,7 @@ function getRoleDestination(user) {
   return "/";
 }
 
-// Prevent sellers and admins from visiting customer marketplace pages.
+// Prevent sellers and admins from accessing the customer marketplace
 function CustomerOnlyRoute() {
   const token = localStorage.getItem("token");
   const user = getUserInfo();
@@ -73,10 +81,31 @@ function CustomerOnlyRoute() {
   return <Outlet />;
 }
 
-// Only unapproved sellers can see this page.
+// Only approved sellers can access the seller workspace
+function ApprovedSellerRoute() {
+  const token = localStorage.getItem("token");
+  const user = getUserInfo();
+
+  if (!token || !user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.role !== "seller") {
+    return <Navigate to={getRoleDestination(user)} replace />;
+  }
+
+  if (user.sellerStatus !== "approved") {
+    return <Navigate to="/seller/pending" replace />;
+  }
+
+  return <Outlet />;
+}
+
+// Pending / rejected seller application page
 function SellerPendingRoute() {
   const token = localStorage.getItem("token");
   const user = getUserInfo();
+
   const isRejected = user?.sellerStatus === "rejected";
 
   if (!token || !user) {
@@ -117,7 +146,7 @@ function SellerPendingRoute() {
             localStorage.removeItem("userInfo");
             window.location.href = "/login";
           }}
-          className="mt-7 rounded-xl bg-[#83CDB5] px-6 py-3 text-sm font-bold text-[#123B35] hover:bg-[#A1DEC9]"
+          className="mt-7 rounded-xl bg-[#83CDB5] px-6 py-3 text-sm font-bold text-[#123B35] transition hover:bg-[#A1DEC9]"
         >
           Sign Out
         </button>
@@ -130,13 +159,13 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Customer marketplace routes */}
+        {/* CUSTOMER MARKETPLACE */}
         <Route element={<CustomerOnlyRoute />}>
           <Route path="/" element={<Home />} />
           <Route path="/products" element={<Products />} />
           <Route path="/product/:id" element={<ProductDetails />} />
 
-          {/* Customer account routes */}
+          {/* CUSTOMER ACCOUNT */}
           <Route element={<ProtectedRoute allowedRoles={["customer"]} />}>
             <Route path="/cart" element={<Cart />} />
             <Route path="/profile" element={<Profile />} />
@@ -145,40 +174,57 @@ function App() {
           </Route>
         </Route>
 
-        {/* Authentication routes */}
+        {/* AUTHENTICATION */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-otp" element={<VerifyOTP />} />
         <Route path="/admin/login" element={<AdminLogin />} />
 
-        {/* Seller pending approval */}
-        <Route path="/seller/pending" element={<SellerPendingRoute />} />
+        {/* SELLER APPLICATION STATUS */}
+        <Route
+          path="/seller/pending"
+          element={<SellerPendingRoute />}
+        />
 
-        {/* Approved seller workspace */}
+        {/* APPROVED SELLER WORKSPACE */}
         <Route element={<ProtectedRoute allowedRoles={["seller"]} />}>
-          <Route path="/seller" element={<SellerLayout />}>
-            <Route index element={<Navigate to="home" replace />} />
-            <Route path="home" element={<SellerHome />} />
-            <Route path="dashboard" element={<SellerDashboard />} />
-            <Route path="products" element={<SellerProducts />} />
-            <Route path="products/add" element={<SellerProductForm />} />
-            <Route path="products/edit/:id" element={<SellerProductForm />} />
-            <Route path="orders" element={<SellerOrders />} />
-            <Route path="store-profile" element={<SellerStoreProfile />} />
+          <Route element={<ApprovedSellerRoute />}>
+            <Route path="/seller" element={<SellerLayout />}>
+              <Route
+                index
+                element={<Navigate to="home" replace />}
+              />
+
+              <Route path="home" element={<SellerHome />} />
+              <Route path="dashboard" element={<SellerDashboard />} />
+              <Route path="products" element={<SellerProducts />} />
+              <Route
+                path="products/add"
+                element={<SellerProductForm />}
+              />
+              <Route
+                path="products/edit/:id"
+                element={<SellerProductForm />}
+              />
+              <Route path="orders" element={<SellerOrders />} />
+              <Route
+                path="store-profile"
+                element={<SellerStoreProfile />}
+              />
+            </Route>
           </Route>
         </Route>
 
-        {/* Admin routes */}
+
+        {/* ADMIN WORKSPACE */}
         <Route element={<AdminRoute />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/admin/products" element={<AdminProducts />} />
-          <Route path="/admin/products/add" element={<ProductForm />} />
-          <Route path="/admin/products/edit/:id" element={<ProductForm />} />
           <Route path="/admin/users" element={<AdminUsers />} />
-          <Route path="/admin/orders" element={<AdminOrders />} />
+          <Route path="/admin/seller-applications" element={<AdminSellerApplications />} />
         </Route>
 
-        {/* Not found */}
+
+        {/* NOT FOUND */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

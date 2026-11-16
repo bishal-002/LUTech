@@ -1,185 +1,133 @@
 
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { getProducts } from "../../services/productService";
+import { Link } from "react-router-dom";
+import AdminLayout from "../../components/admin/AdminLayout";
 
 function AdminDashboard() {
-  const navigate = useNavigate();
-  const [productCount, setProductCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let active = true;
-
-    const loadProducts = async () => {
-      try {
-        const data = await getProducts();
-        const products = Array.isArray(data)
-          ? data
-          : data?.products ?? [];
-
-        if (active) setProductCount(products.length);
-      } catch {
-        if (active) {
-          setError("Could not load product statistics.");
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    loadProducts();
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("userInfo");
-    navigate("/admin/login", { replace: true });
-  };
-
-  const userInfo = (() => {
-    try {
-      return JSON.parse(localStorage.getItem("userInfo") || "{}");
-    } catch {
-      return {};
-    }
-  })();
-
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <Link
-            to="/admin/dashboard"
-            className="text-2xl font-bold tracking-tight text-blue-700"
-          >
-            LUTech <span className="text-slate-500">Admin</span>
-          </Link>
-
-          <Link
-            to="/admin/users"
-            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-blue-600"
-          >
-            User Management
-          </Link>
-          <Link
-            to="/admin/orders"
-            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-blue-600"
-          >
-            Orders
-          </Link>
-
-
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-slate-600 sm:inline">
-              {userInfo.name || userInfo.email || "Administrator"}
-            </span>
-            <button
-              onClick={handleLogout}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50"
-            >
-              Log out
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <p className="text-sm font-semibold uppercase tracking-wider text-blue-700">
-            Administration
+    <AdminLayout>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div>
+          <p className="text-sm font-medium text-[#83CDB5]">
+            LUTech Administration
           </p>
-          <h1 className="mt-2 text-3xl font-bold">Dashboard</h1>
-          <p className="mt-2 text-slate-600">
-            Manage the LUTech store from one place.
+
+          <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
+            Dashboard
+          </h1>
+
+          <p className="mt-2 text-sm text-teal-100/70">
+            Welcome to the LUTech administration workspace.
           </p>
         </div>
 
-        <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
-              Total products
-            </p>
-            <div className="mt-4 text-4xl font-bold text-slate-900">
-              {loading ? "…" : productCount}
+        {/* Main Administration Card */}
+        <section className="rounded-2xl bg-white p-6 shadow-sm sm:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-emerald-700">
+                Platform Administration
+              </p>
+
+              <h2 className="mt-2 text-2xl font-bold text-slate-900">
+                Manage Users & Sellers
+              </h2>
+
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+                Manage registered accounts, review seller applications,
+                approve or reject applications, and control user roles
+                from one central location.
+              </p>
+
+              <Link
+                to="/admin/users"
+                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#103B37] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#18554C]"
+              >
+                Open User Management
+                <span>→</span>
+              </Link>
             </div>
-            <p className="mt-2 text-sm text-slate-500">
-              Products currently returned by the API
-            </p>
-          </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
-              Store management
-            </p>
-            <h2 className="mt-4 text-xl font-bold">Product catalogue</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Review existing products and manage their details.
-            </p>
-            <Link
-              to="/admin/products"
-              className="mt-5 inline-flex rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
-            >
-              Manage products
-            </Link>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
-              Quick action
-            </p>
-            <h2 className="mt-4 text-xl font-bold">Add a product</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Add a new item to the store catalogue.
-            </p>
-            <Link
-              to="/admin/products/add"
-              className="mt-5 inline-flex rounded-lg border border-blue-700 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
-            >
-              Add product
-            </Link>
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-4xl">
+              👥
+            </div>
           </div>
         </section>
 
-        {error && (
-          <div
-            role="alert"
-            className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
-          >
-            {error} You can still open product management and try again.
-          </div>
-        )}
+        {/* Administration Responsibilities */}
+        <section>
+          <div className="mb-4">
+            <h2 className="text-lg font-bold text-white">
+              Administration Overview
+            </h2>
 
-        <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-bold">Admin shortcuts</h2>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <Link
-              to="/admin/products"
-              className="rounded-lg bg-slate-100 px-4 py-3 text-sm font-semibold hover:bg-slate-200"
-            >
-              View all products →
-            </Link>
-            <Link
-              to="/"
-              className="rounded-lg bg-slate-100 px-4 py-3 text-sm font-semibold hover:bg-slate-200"
-            >
-              View storefront →
-            </Link>
-            <Link
-              to="/admin/orders"
-              className="rounded-lg bg-slate-100 px-4 py-3 text-sm font-semibold hover:bg-slate-200"
-            >
-              Manage all orders →
-            </Link>
+            <p className="mt-1 text-sm text-teal-100/70">
+              Main responsibilities of the LUTech administrator.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="rounded-2xl bg-white p-5 shadow-sm">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-xl">
+                👤
+              </div>
+
+              <h3 className="mt-4 font-bold text-slate-900">
+                User Management
+              </h3>
+
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                View registered accounts, search users, manage account
+                roles and maintain the user community.
+              </p>
+
+              <Link
+                to="/admin/users"
+                className="mt-4 inline-flex text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+              >
+                Manage users →
+              </Link>
+            </div>
+
+            <div className="rounded-2xl bg-white p-5 shadow-sm">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-xl">
+                🏪
+              </div>
+
+              <h3 className="mt-4 font-bold text-slate-900">
+                Seller Applications
+              </h3>
+
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Review seller applications, verify submitted information
+                and approve or reject seller requests.
+              </p>
+
+              <Link
+                to="/admin/users"
+                className="mt-4 inline-flex text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+              >
+                Review applications →
+              </Link>
+            </div>
           </div>
         </section>
-      </main>
-    </div>
+
+        {/* Information */}
+        <section className="rounded-2xl border border-[#83CDB5]/20 bg-[#092F30] p-5 sm:p-6">
+          <h2 className="font-bold text-[#B9F4E4]">
+            Admin Panel Information
+          </h2>
+
+          <p className="mt-2 text-sm leading-6 text-white/65">
+            The administrator is responsible for platform-level
+            administration, user account management and seller
+            application verification. Product and order operations
+            remain within the seller and customer workspaces.
+          </p>
+        </section>
+      </div>
+    </AdminLayout>
   );
 }
 
