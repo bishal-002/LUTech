@@ -66,8 +66,8 @@ function Register() {
       return false;
     }
 
-    if (formData.password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (formData.password.length < 8) {
+      setError("Password must be at least 8 characters.");
       return false;
     }
 
@@ -253,10 +253,10 @@ function Register() {
               type={showPassword ? "text" : "password"}
               name="password"
               autoComplete="new-password"
-              placeholder="At least 6 characters"
+              placeholder="At least 8 characters"
               value={formData.password}
               onChange={handleChange}
-              minLength={6}
+              minLength={8}
               required
               className={passwordInputClass}
             />
@@ -322,7 +322,7 @@ function Register() {
               placeholder="Re-enter your password"
               value={formData.confirmPassword}
               onChange={handleChange}
-              minLength={6}
+              minLength={8}
               required
               className={passwordInputClass}
             />
