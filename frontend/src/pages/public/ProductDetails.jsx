@@ -3,6 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { getProductById } from "../../services/productService";
+import {
+  addToWishlist,
+  addRecentlyViewed,
+} from "../../services/userService";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import Loader from "../../components/Loader";
@@ -15,6 +19,7 @@ function ProductDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [wishlistLoading, setWishlistLoading] = useState(false);
 
   const fetchProduct = useCallback(async () => {
     setLoading(true);
@@ -24,7 +29,21 @@ function ProductDetails() {
 
     try {
       const data = await getProductById(id);
-      setProduct(data.product || data);
+      const loadedProduct = data.product || data;
+      setProduct(loadedProduct);
+
+      // Track product views only for authenticated customer accounts.
+      try {
+        const storedUser = localStorage.getItem("userInfo");
+        const currentUser = storedUser ? JSON.parse(storedUser) : null;
+        if (localStorage.getItem("token") && currentUser?.role === "customer") {
+          addRecentlyViewed(loadedProduct._id).catch((trackingError) => {
+            console.warn("Unable to update recently viewed products:", trackingError);
+          });
+        }
+      } catch (trackingError) {
+        console.warn("Unable to read customer session:", trackingError);
+      }
     } catch (err) {
       setError(
         err.response?.data?.message ||
@@ -84,6 +103,33 @@ function ProductDetails() {
       setMessage(`${product.name} added to your cart.`);
     } catch {
       setError("Unable to update your cart. Please try again.");
+    }
+  };
+
+  const handleAddToWishlist = async () => {
+    if (!product?._id) return;
+    let currentUser = null;
+    try {
+      const storedUser = localStorage.getItem("userInfo");
+      currentUser = storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      currentUser = null;
+    }
+
+    if (!localStorage.getItem("token") || currentUser?.role !== "customer") {
+      setError("Please sign in with a customer account to save wishlist items.");
+      return;
+    }
+
+    setWishlistLoading(true);
+    setError("");
+    try {
+      await addToWishlist(product._id);
+      setMessage("Product added to your wishlist.");
+    } catch (err) {
+      setError(err.response?.data?.message || "Unable to add this product to your wishlist.");
+    } finally {
+      setWishlistLoading(false);
     }
   };
 
@@ -336,6 +382,15 @@ function ProductDetails() {
                     </svg>
 
                     Add to Cart
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleAddToWishlist}
+                    disabled={wishlistLoading}
+                    className="mt-3 flex min-h-11 w-full items-center justify-center rounded-lg border border-[#D5DED7] px-5 py-2.5 text-sm font-semibold text-[#20332B] transition hover:bg-[#F4F6F4] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {wishlistLoading ? "Saving..." : "♡ Add to Wishlist"}
                   </button>
 
                   <Link
