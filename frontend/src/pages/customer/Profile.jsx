@@ -18,6 +18,19 @@ function Profile() {
   const [user, setUser] = useState(null);
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [addresses, setAddresses] = useState([]);
+  const [preferences, setPreferences] = useState({
+    orderUpdatesSms: true,
+    priceDropEmails: true,
+    warrantyExpiryReminders: true,
+  });
+  const [billingProfile, setBillingProfile] = useState({
+    companyName: "",
+    binNumber: "",
+  });
+  const [ownedDevices, setOwnedDevices] = useState([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -42,10 +55,25 @@ function Profile() {
       }
 
       const data = await getUserProfile(userInfo._id);
+      const profile = data.user || data;
 
-      setUser(data);
-      setName(data.name || "");
-      setAddress(data.address || "");
+      setUser(profile);
+      setName(profile.name || profile.fullName || "");
+      setAddress(profile.address || "");
+      setPhone(profile.phone || "");
+      setAvatarUrl(profile.avatarUrl || "");
+      setAddresses(profile.addresses || []);
+      setPreferences({
+        orderUpdatesSms: true,
+        priceDropEmails: true,
+        warrantyExpiryReminders: true,
+        ...(profile.preferences || {}),
+      });
+      setBillingProfile({
+        companyName: profile.billingProfile?.companyName || "",
+        binNumber: profile.billingProfile?.binNumber || "",
+      });
+      setOwnedDevices(profile.ownedDevices || []);
     } catch {
       setError("Failed to load your profile. Please try again.");
     } finally {
@@ -83,6 +111,12 @@ function Profile() {
       const response = await updateUserProfile(userInfo._id, {
         name: name.trim(),
         address: address.trim(),
+        phone: phone.trim(),
+        avatarUrl: avatarUrl.trim(),
+        addresses,
+        preferences,
+        billingProfile,
+        ownedDevices,
       });
 
       setMessage(response.message || "Profile updated successfully.");
@@ -91,6 +125,20 @@ function Profile() {
         setUser(response.user);
         setName(response.user.name || "");
         setAddress(response.user.address || "");
+        setPhone(response.user.phone || "");
+        setAvatarUrl(response.user.avatarUrl || "");
+        setAddresses(response.user.addresses || []);
+        setPreferences({
+          orderUpdatesSms: true,
+          priceDropEmails: true,
+          warrantyExpiryReminders: true,
+          ...(response.user.preferences || {}),
+        });
+        setBillingProfile({
+          companyName: response.user.billingProfile?.companyName || "",
+          binNumber: response.user.billingProfile?.binNumber || "",
+        });
+        setOwnedDevices(response.user.ownedDevices || []);
 
         localStorage.setItem(
           "userInfo",
@@ -438,6 +486,41 @@ function Profile() {
                 </div>
 
                 <div className="w-full min-w-0">
+                  <label htmlFor="profile-phone" className="mb-2 block text-xs font-semibold text-[#20332B]">
+                    Mobile Number
+                  </label>
+                  <input
+                    id="profile-phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+8801XXXXXXXXX"
+                    autoComplete="tel"
+                    disabled={saving || deleting}
+                    className="block w-full min-w-0 rounded-lg border border-[#E5E9E5] bg-[#F9FAF9] px-4 py-3 text-sm text-[#20332B] outline-none focus:border-[#1A2E26] focus:bg-white focus:ring-4 focus:ring-[#1A2E26]/10 disabled:bg-[#F4F6F4]"
+                  />
+                  <p className="mt-2 text-xs text-[#89958D]">
+                    Used for cash-on-delivery confirmation and courier delivery. Use a Bangladesh number.
+                    {user.isPhoneVerified ? " Phone verified." : " Phone not yet verified."}
+                  </p>
+                </div>
+
+                <div className="w-full min-w-0">
+                  <label htmlFor="profile-avatar" className="mb-2 block text-xs font-semibold text-[#20332B]">
+                    Profile Image URL
+                  </label>
+                  <input
+                    id="profile-avatar"
+                    type="url"
+                    value={avatarUrl}
+                    onChange={(e) => setAvatarUrl(e.target.value)}
+                    placeholder="https://example.com/profile.jpg"
+                    disabled={saving || deleting}
+                    className="block w-full min-w-0 rounded-lg border border-[#E5E9E5] bg-[#F9FAF9] px-4 py-3 text-sm text-[#20332B] outline-none focus:border-[#1A2E26] focus:bg-white focus:ring-4 focus:ring-[#1A2E26]/10 disabled:bg-[#F4F6F4]"
+                  />
+                </div>
+
+                <div className="w-full min-w-0">
                   <label className="mb-2 block text-xs font-semibold text-[#20332B]">
                     Email Verification
                   </label>
@@ -479,6 +562,180 @@ function Profile() {
                     className="block w-full min-w-0 resize-y rounded-lg border border-[#E5E9E5] bg-[#F9FAF9] px-4 py-3 text-sm leading-6 text-[#20332B] outline-none transition placeholder:text-[#A0AAA3] hover:border-[#C7D5CA] focus:border-[#1A2E26] focus:bg-white focus:ring-4 focus:ring-[#1A2E26]/10 disabled:bg-[#F4F6F4]"
                   />
                 </div>
+
+                {/* Saved delivery addresses */}
+                <section className="space-y-4 rounded-xl border border-[#E5E9E5] p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-[#20332B]">Saved Addresses</h3>
+                      <p className="mt-1 text-xs text-[#89958D]">Save up to five addresses for faster checkout.</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={addresses.length >= 5 || saving || deleting}
+                      onClick={() => setAddresses((items) => [...items, {
+                        label: "Home", recipientName: name, recipientPhone: phone,
+                        division: "", district: "", area: "", streetAddress: "",
+                        postalCode: "", isDefaultShipping: items.length === 0,
+                        isDefaultBilling: items.length === 0,
+                      }])}
+                      className="rounded-lg border border-[#C7D5CA] px-3 py-2 text-xs font-semibold text-[#20332B] hover:bg-[#EBF0EB] disabled:opacity-50"
+                    >
+                      + Add Address
+                    </button>
+                  </div>
+
+                  {addresses.length === 0 && (
+                    <p className="rounded-lg bg-[#F9FAF9] p-3 text-sm text-[#89958D]">
+                      No saved addresses yet. You can still use the delivery address above.
+                    </p>
+                  )}
+
+                  {addresses.map((item, index) => (
+                    <div key={item._id || index} className="space-y-3 rounded-lg bg-[#F9FAF9] p-3 sm:p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <select
+                          value={item.label || "Home"}
+                          onChange={(e) => setAddresses((items) => items.map((entry, i) => i === index ? { ...entry, label: e.target.value } : entry))}
+                          className="rounded-lg border border-[#E5E9E5] bg-white px-3 py-2 text-sm"
+                        >
+                          <option>Home</option>
+                          <option>Office</option>
+                          <option>Campus / Hostel</option>
+                          <option>Other</option>
+                        </select>
+                        <button type="button" onClick={() => setAddresses((items) => items.filter((_, i) => i !== index))} className="text-xs font-semibold text-red-600 hover:underline">
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {[
+                          ["recipientName", "Recipient Name"],
+                          ["recipientPhone", "Recipient Phone"],
+                          ["division", "Division"],
+                          ["district", "District"],
+                          ["area", "Area / Upazila"],
+                          ["postalCode", "Postal Code"],
+                        ].map(([field, label]) => (
+                          <label key={field} className="block text-xs font-semibold text-[#20332B]">
+                            {label}
+                            <input
+                              value={item[field] || ""}
+                              onChange={(e) => setAddresses((items) => items.map((entry, i) => i === index ? { ...entry, [field]: e.target.value } : entry))}
+                              className="mt-1 block w-full rounded-lg border border-[#E5E9E5] bg-white px-3 py-2.5 text-sm font-normal"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      <label className="block text-xs font-semibold text-[#20332B]">
+                        Street Address
+                        <textarea
+                          rows={2}
+                          maxLength={200}
+                          value={item.streetAddress || ""}
+                          onChange={(e) => setAddresses((items) => items.map((entry, i) => i === index ? { ...entry, streetAddress: e.target.value } : entry))}
+                          className="mt-1 block w-full rounded-lg border border-[#E5E9E5] bg-white px-3 py-2.5 text-sm font-normal"
+                        />
+                      </label>
+
+                      <div className="flex flex-wrap gap-4 text-xs text-[#53645A]">
+                        <label className="flex items-center gap-2">
+                          <input type="checkbox" checked={Boolean(item.isDefaultShipping)} onChange={(e) => setAddresses((items) => items.map((entry, i) => ({ ...entry, isDefaultShipping: i === index ? e.target.checked : false })))} />
+                          Default shipping
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input type="checkbox" checked={Boolean(item.isDefaultBilling)} onChange={(e) => setAddresses((items) => items.map((entry, i) => ({ ...entry, isDefaultBilling: i === index ? e.target.checked : false })))} />
+                          Default billing
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </section>
+
+                {/* Customer preferences */}
+                <section className="space-y-3 rounded-xl border border-[#E5E9E5] p-4 sm:p-5">
+                  <h3 className="font-bold text-[#20332B]">Communication Preferences</h3>
+                  {[
+                    ["orderUpdatesSms", "SMS notifications for order updates"],
+                    ["priceDropEmails", "Email notifications for price drops"],
+                    ["warrantyExpiryReminders", "Warranty expiry reminders"],
+                  ].map(([field, label]) => (
+                    <label key={field} className="flex items-center gap-3 text-sm text-[#53645A]">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(preferences[field])}
+                        onChange={(e) => setPreferences((current) => ({ ...current, [field]: e.target.checked }))}
+                        className="h-4 w-4 accent-[#1A2E26]"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </section>
+
+                {/* Billing profile */}
+                <section className="space-y-3 rounded-xl border border-[#E5E9E5] p-4 sm:p-5">
+                  <h3 className="font-bold text-[#20332B]">Billing Profile (Optional)</h3>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="text-xs font-semibold text-[#20332B]">
+                      Company Name
+                      <input
+                        value={billingProfile.companyName}
+                        onChange={(e) => setBillingProfile((current) => ({ ...current, companyName: e.target.value }))}
+                        maxLength={120}
+                        className="mt-1 block w-full rounded-lg border border-[#E5E9E5] bg-[#F9FAF9] px-3 py-2.5 text-sm font-normal"
+                      />
+                    </label>
+                    <label className="text-xs font-semibold text-[#20332B]">
+                      BIN Number
+                      <input
+                        value={billingProfile.binNumber}
+                        onChange={(e) => setBillingProfile((current) => ({ ...current, binNumber: e.target.value }))}
+                        maxLength={30}
+                        className="mt-1 block w-full rounded-lg border border-[#E5E9E5] bg-[#F9FAF9] px-3 py-2.5 text-sm font-normal"
+                      />
+                    </label>
+                  </div>
+                </section>
+
+                {/* Owned devices */}
+                <section className="space-y-3 rounded-xl border border-[#E5E9E5] p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-[#20332B]">My Devices</h3>
+                      <p className="mt-1 text-xs text-[#89958D]">Optional device details for more relevant product discovery.</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={ownedDevices.length >= 20}
+                      onClick={() => setOwnedDevices((items) => [...items, { brand: "", model: "", category: "" }])}
+                      className="rounded-lg border border-[#C7D5CA] px-3 py-2 text-xs font-semibold text-[#20332B] hover:bg-[#EBF0EB] disabled:opacity-50"
+                    >
+                      + Add Device
+                    </button>
+                  </div>
+                  {ownedDevices.map((device, index) => (
+                    <div key={index} className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                      {[
+                        ["brand", "Brand"],
+                        ["model", "Model"],
+                        ["category", "Category"],
+                      ].map(([field, label]) => (
+                        <label key={field} className="text-xs font-semibold text-[#20332B]">
+                          {label}
+                          <input
+                            value={device[field] || ""}
+                            onChange={(e) => setOwnedDevices((items) => items.map((entry, i) => i === index ? { ...entry, [field]: e.target.value } : entry))}
+                            className="mt-1 block w-full rounded-lg border border-[#E5E9E5] bg-[#F9FAF9] px-3 py-2.5 text-sm font-normal"
+                          />
+                        </label>
+                      ))}
+                      <button type="button" onClick={() => setOwnedDevices((items) => items.filter((_, i) => i !== index))} className="mb-2 text-xs font-semibold text-red-600 hover:underline">
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </section>
 
                 <div className="border-t border-[#E5E9E5] pt-5">
                   <button
