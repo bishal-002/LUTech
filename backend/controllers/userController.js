@@ -426,6 +426,9 @@ const updateUserProfile = async (req, res) => {
       if (normalizedPhone) {
         const duplicate = await User.findOne({ phone: normalizedPhone, _id: { $ne: user._id } }).select("_id");
         if (duplicate) return res.status(409).json({ message: "This phone number is already registered." });
+        if (user.phone !== normalizedPhone) {
+          user.isPhoneVerified = false;
+        }
         user.phone = normalizedPhone;
       } else {
         user.phone = undefined;
