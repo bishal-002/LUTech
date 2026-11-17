@@ -457,6 +457,7 @@ function Profile() {
                     id="profile-name"
                     type="text"
                     value={name}
+                    maxLength={80}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Enter your full name"
                     autoComplete="name"
