@@ -361,7 +361,7 @@ const isValidBdPhone = (phone) =>
 
 const normalizeBdPhone = (phone) => {
   const value = String(phone || "").replace(/[\s-]/g, "");
-  if (value.startsWith("01")) return \`+880\${value.slice(1)}\`;
+  if (value.startsWith("01")) return `+880${value.slice(1)}`;
   return value;
 };
 
@@ -506,7 +506,7 @@ const updateUserProfile = async (req, res) => {
       for (const key of allowed) {
         if (Object.prototype.hasOwnProperty.call(preferences, key)) {
           if (typeof preferences[key] !== "boolean") {
-            return res.status(400).json({ message: \`Preference "\${key}" must be true or false.\` });
+            return res.status(400).json({ message: `Preference "${key}" must be true or false.` });
           }
           nextPreferences[key] = preferences[key];
         }
