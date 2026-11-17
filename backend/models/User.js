@@ -336,6 +336,91 @@ const userSchema = new mongoose.Schema(
     },
 
     // --------------------------------------------------
+    // CUSTOMER ACCOUNT AND SHOPPING PROFILE
+    // --------------------------------------------------
+
+    phone: {
+      type: String,
+      trim: true,
+      default: undefined,
+      maxlength: 20,
+      unique: true,
+      sparse: true,
+    },
+
+    googleId: {
+      type: String,
+      trim: true,
+      default: undefined,
+      unique: true,
+      sparse: true,
+      select: false,
+    },
+
+    status: {
+      type: String,
+      enum: ["active", "suspended", "deactivated"],
+      default: "active",
+      index: true,
+    },
+
+    isPhoneVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    avatarUrl: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 2048,
+    },
+
+    addresses: {
+      type: [customerAddressSchema],
+      default: [],
+      validate: {
+        validator: (items) => items.length <= 5,
+        message: "A customer can save a maximum of 5 addresses.",
+      },
+    },
+
+    wishlist: { type: [customerWishlistSchema], default: [] },
+    priceAlerts: { type: [customerPriceAlertSchema], default: [] },
+    ownedDevices: { type: [ownedDeviceSchema], default: [] },
+
+    recentlyViewed: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
+      default: [],
+      validate: {
+        validator: (items) => items.length <= 12,
+        message: "Recently viewed can contain at most 12 products.",
+      },
+    },
+
+    billingProfile: {
+      type: customerBillingProfileSchema,
+      default: () => ({}),
+    },
+
+    preferences: {
+      type: customerPreferencesSchema,
+      default: () => ({}),
+    },
+
+    // Buyer performance data is kept separate from seller metrics.
+    customerMetrics: {
+      deliveredOrders: { type: Number, default: 0, min: 0 },
+      refusedCodOrders: { type: Number, default: 0, min: 0 },
+      totalSpent: { type: Number, default: 0, min: 0 },
+    },
+
+    lastLoginAt: {
+      type: Date,
+      default: null,
+    },
+
+    // --------------------------------------------------
     // SELLER ACCOUNT STATUS
     // --------------------------------------------------
 
@@ -629,6 +714,23 @@ userSchema.pre("validate", function (next) {
       .replace(/^-+|-+$/g, "");
 
     this.storeSlug = baseSlug;
+  }
+
+  // Customer-specific address and history limits.
+  if (Array.isArray(this.addresses)) {
+    if (this.addresses.length > 5) {
+      this.invalidate("addresses", "A maximum of 5 saved addresses is allowed.");
+    }
+    if (this.addresses.filter((item) => item.isDefaultShipping).length > 1) {
+      this.invalidate("addresses", "Only one default shipping address is allowed.");
+    }
+    if (this.addresses.filter((item) => item.isDefaultBilling).length > 1) {
+      this.invalidate("addresses", "Only one default billing address is allowed.");
+    }
+  }
+
+  if (this.recentlyViewed?.length > 12) {
+    this.recentlyViewed = this.recentlyViewed.slice(-12);
   }
 
   // Seller-specific validation.
