@@ -481,6 +481,8 @@ const updateUserProfile = async (req, res) => {
       if (defaultAddress) {
         user.address = [defaultAddress.streetAddress, defaultAddress.area, defaultAddress.district, defaultAddress.division, defaultAddress.postalCode]
           .filter(Boolean).join(", ");
+      } else {
+        user.address = "";
       }
     }
 
