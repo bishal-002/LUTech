@@ -17,6 +17,50 @@ const addressSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Customer-only subdocuments. Kept separate from seller schemas.
+const customerAddressSchema = new mongoose.Schema({
+  label: { type: String, enum: ["Home", "Office", "Campus / Hostel", "Other"], default: "Home" },
+  recipientName: { type: String, trim: true, maxlength: 80, default: "" },
+  recipientPhone: { type: String, trim: true, maxlength: 20, default: "" },
+  division: { type: String, trim: true, default: "" },
+  district: { type: String, trim: true, default: "" },
+  area: { type: String, trim: true, default: "" },
+  streetAddress: { type: String, trim: true, maxlength: 200, default: "" },
+  postalCode: { type: String, trim: true, default: "" },
+  isDefaultShipping: { type: Boolean, default: false },
+  isDefaultBilling: { type: Boolean, default: false },
+}, { _id: true });
+
+const customerWishlistSchema = new mongoose.Schema({
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+  variantSku: { type: String, trim: true, uppercase: true, default: "" },
+  addedAt: { type: Date, default: Date.now },
+}, { _id: false });
+
+const customerPriceAlertSchema = new mongoose.Schema({
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+  variantSku: { type: String, trim: true, uppercase: true, default: "" },
+  targetPrice: { type: Number, min: 0, required: true },
+  notifyOnRestock: { type: Boolean, default: true },
+}, { _id: false });
+
+const ownedDeviceSchema = new mongoose.Schema({
+  brand: { type: String, trim: true, maxlength: 80, default: "" },
+  model: { type: String, trim: true, maxlength: 100, default: "" },
+  category: { type: String, trim: true, maxlength: 80, default: "" },
+}, { _id: false });
+
+const customerPreferencesSchema = new mongoose.Schema({
+  orderUpdatesSms: { type: Boolean, default: true },
+  priceDropEmails: { type: Boolean, default: true },
+  warrantyExpiryReminders: { type: Boolean, default: true },
+}, { _id: false });
+
+const customerBillingProfileSchema = new mongoose.Schema({
+  companyName: { type: String, trim: true, maxlength: 120, default: "" },
+  binNumber: { type: String, trim: true, maxlength: 30, default: "" },
+}, { _id: false });
+
 const supportHoursSchema = new mongoose.Schema(
   {
     monday: { type: String, trim: true, default: "Closed" },
