@@ -6,10 +6,7 @@ const {
   updateSellerProfile,
 } = require("../controllers/userController");
 
-const {
-  protect,
-  sellerOnly,
-} = require("../middleware/authMiddleware");
+const { protect, sellerOnly } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
@@ -17,5 +14,6 @@ router.use(protect, sellerOnly);
 
 router.get("/", getSellerProfile);
 router.put("/", updateSellerProfile);
+router.patch("/", updateSellerProfile);
 
 module.exports = router;

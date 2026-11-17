@@ -4,10 +4,10 @@ const express = require("express");
 const {
   registerUser,
   loginUser,
+  verifyOTP,
   getUserProfile,
   updateUserProfile,
   deleteUserProfile,
-  verifyOTP,
   applyToBecomeSeller,
   getSellerApplicationStatus,
 } = require("../controllers/userController");
@@ -16,18 +16,50 @@ const { protect } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// Public authentication routes
+/*
+|--------------------------------------------------------------------------
+| Public Authentication Routes
+|--------------------------------------------------------------------------
+| These routes do not require an authentication token.
+*/
+
+// Register a new customer or seller account
 router.post("/register", registerUser);
+
+// Log in an existing account
 router.post("/login", loginUser);
+
+// Verify email using OTP
 router.post("/verify-otp", verifyOTP);
 
-// Protected profile routes
-router.get("/profile/:id", protect, getUserProfile);
-router.put("/profile/:id", protect, updateUserProfile);
-router.delete("/profile/:id", protect, deleteUserProfile);
+/*
+|--------------------------------------------------------------------------
+| Protected User Routes
+|--------------------------------------------------------------------------
+| Every route below requires a valid authentication token.
+*/
 
-// Customer seller application routes
-router.post("/seller-application", protect, applyToBecomeSeller);
-router.get("/seller-application", protect, getSellerApplicationStatus);
+router.use(protect);
+
+// Get user profile
+router.get("/profile/:id", getUserProfile);
+
+// Update user profile
+router.put("/profile/:id", updateUserProfile);
+
+// Delete user profile
+router.delete("/profile/:id", deleteUserProfile);
+
+/*
+|--------------------------------------------------------------------------
+| Seller Application Routes
+|--------------------------------------------------------------------------
+*/
+
+// Submit an application to become a seller
+router.post("/seller-application", applyToBecomeSeller);
+
+// Check the current user's seller application status
+router.get("/seller-application", getSellerApplicationStatus);
 
 module.exports = router;

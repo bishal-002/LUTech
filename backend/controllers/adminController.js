@@ -1,39 +1,27 @@
 
+const mongoose = require("mongoose");
 const User = require("../models/User");
 
-// Escape special characters in search input
 const escapeRegex = (value) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// GET /api/admin/users
-// Retrieve users with search and pagination
 const getAllUsers = async (req, res) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(
-      100,
-      Math.max(1, parseInt(req.query.limit, 10) || 10)
-    );
-
-    const search = req.query.search?.trim();
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
     const filter = {};
 
-    if (search) {
-      const searchRegex = new RegExp(escapeRegex(search), "i");
-
-      filter.$or = [
-        { name: searchRegex },
-        { email: searchRegex },
-      ];
+    if (req.query.search?.trim()) {
+      const regex = new RegExp(escapeRegex(req.query.search.trim()), "i");
+      filter.$or = [{ name: regex }, { email: regex }];
     }
 
     const [users, totalUsers] = await Promise.all([
       User.find(filter)
-        .select("_id name email role isVerified createdAt")
+        .select("_id name email role isVerified sellerStatus verificationStatus createdAt")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit),
-
       User.countDocuments(filter),
     ]);
 
@@ -47,19 +35,14 @@ const getAllUsers = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get all users error:", error);
-
-    return res.status(500).json({
-      message: "Failed to retrieve users",
-    });
+    console.error("Get users:", error);
+    return res.status(500).json({ message: "Unable to retrieve users." });
   }
 };
 
-// GET /api/admin/users/stats
-// Retrieve user statistics
 const getUserStats = async (req, res) => {
   try {
-    const [total, customers, sellers, admins, verified, unverified] =
+    const [total, customers, sellers, admins, verified, unverified, pendingSellers] =
       await Promise.all([
         User.countDocuments(),
         User.countDocuments({ role: "customer" }),
@@ -67,6 +50,7 @@ const getUserStats = async (req, res) => {
         User.countDocuments({ role: "admin" }),
         User.countDocuments({ isVerified: true }),
         User.countDocuments({ isVerified: false }),
+        User.countDocuments({ sellerStatus: "pending" }),
       ]);
 
     return res.status(200).json({
@@ -76,64 +60,64 @@ const getUserStats = async (req, res) => {
       admins,
       verified,
       unverified,
+      pendingSellers,
     });
   } catch (error) {
-    console.error("Get user stats error:", error);
-
-    return res.status(500).json({
-      message: "Failed to retrieve user statistics",
-    });
+    console.error("Get user stats:", error);
+    return res.status(500).json({ message: "Unable to retrieve statistics." });
   }
 };
 
-// PUT /api/admin/users/:id/role
-// Change a user's role
 const updateUserRole = async (req, res) => {
   try {
     const { role } = req.body;
     const { id } = req.params;
 
-    const allowedRoles = ["customer", "seller", "admin"];
-
-    if (!allowedRoles.includes(role)) {
-      return res.status(400).json({
-        message: "Invalid user role",
-      });
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid user ID." });
     }
 
-    // Prevent an Admin from changing their own role
+    if (!["customer", "seller", "admin"].includes(role)) {
+      return res.status(400).json({ message: "Invalid role." });
+    }
+
     if (req.user._id.toString() === id) {
-      return res.status(400).json({
-        message: "You cannot change your own role",
-      });
+      return res.status(400).json({ message: "You cannot change your own role." });
     }
 
     const user = await User.findById(id);
 
     if (!user) {
-      return res.status(404).json({
-        message: "User not found",
-      });
+      return res.status(404).json({ message: "User not found." });
     }
 
-    // Prevent removal of the last Admin
     if (user.role === "admin" && role !== "admin") {
-      const adminCount = await User.countDocuments({
-        role: "admin",
-      });
+      const adminCount = await User.countDocuments({ role: "admin" });
 
       if (adminCount <= 1) {
         return res.status(400).json({
-          message: "Cannot remove the last administrator",
+          message: "Cannot remove the last administrator.",
         });
       }
     }
 
+    if (role === "seller") {
+      return res.status(400).json({
+        message: "Use the seller application approval process to grant seller access.",
+      });
+    }
+
     user.role = role;
+
+    if (role === "customer") {
+      user.sellerStatus = "not_applicable";
+      user.verificationStatus = "not_submitted";
+    }
+
     await user.save();
 
     return res.status(200).json({
-      message: "User role updated successfully",
+      message: "User role updated.",
       user: {
         _id: user._id,
         name: user.name,
@@ -143,89 +127,75 @@ const updateUserRole = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Update user role error:", error);
-
-    return res.status(500).json({
-      message: "Failed to update user role",
-    });
+    console.error("Update user role:", error);
+    return res.status(500).json({ message: "Unable to update user role." });
   }
 };
 
-// DELETE /api/admin/users/:id
-// Delete a user account
 const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Prevent an Admin from deleting their own account
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid user ID." });
+    }
+
     if (req.user._id.toString() === id) {
-      return res.status(400).json({
-        message: "You cannot delete your own account",
-      });
+      return res.status(400).json({ message: "You cannot delete your own account." });
     }
 
     const user = await User.findById(id);
 
     if (!user) {
-      return res.status(404).json({
-        message: "User not found",
-      });
+      return res.status(404).json({ message: "User not found." });
     }
 
-    // Prevent deletion of the last Admin
     if (user.role === "admin") {
-      const adminCount = await User.countDocuments({
-        role: "admin",
-      });
+      const adminCount = await User.countDocuments({ role: "admin" });
 
       if (adminCount <= 1) {
         return res.status(400).json({
-          message: "Cannot delete the last administrator",
+          message: "Cannot delete the last administrator.",
         });
       }
     }
 
     await user.deleteOne();
 
-    return res.status(200).json({
-      message: "User deleted successfully",
-    });
+    return res.status(200).json({ message: "User deleted successfully." });
   } catch (error) {
-    console.error("Delete user error:", error);
-
-    return res.status(500).json({
-      message: "Failed to delete user",
-    });
+    console.error("Delete user:", error);
+    return res.status(500).json({ message: "Unable to delete user." });
   }
 };
-
-
 
 const getSellerApplications = async (req, res) => {
   try {
     const applicants = await User.find({
-      $or: [
-        { role: "seller", sellerStatus: "pending" },
-        { role: "customer", sellerStatus: "pending" },
-      ],
-    }).select(
-      "_id name email role isVerified sellerStatus storeName storeDescription storePhone storeAddress sellerApplication createdAt"
-    );
+      sellerStatus: "pending",
+      role: { $in: ["customer", "seller"] },
+    })
+      .select("_id name email role isVerified sellerStatus verificationStatus storeName storeDescription storePhone storeAddress sellerApplication createdAt")
+      .sort({ createdAt: 1 });
 
     return res.status(200).json({
       count: applicants.length,
       applicants,
     });
   } catch (error) {
-    console.error("Get seller applications error:", error);
+    console.error("Get seller applications:", error);
     return res.status(500).json({
-      message: "Failed to retrieve seller applications",
+      message: "Unable to retrieve seller applications.",
     });
   }
 };
 
 const approveSeller = async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid applicant ID." });
+    }
+
     const applicant = await User.findById(req.params.id);
 
     if (
@@ -234,43 +204,47 @@ const approveSeller = async (req, res) => {
       !["customer", "seller"].includes(applicant.role)
     ) {
       return res.status(404).json({
-        message: "Pending seller application not found",
+        message: "Pending seller application not found.",
       });
     }
 
     if (!applicant.isVerified) {
       return res.status(400).json({
-        message: "Applicant must verify their email first",
+        message: "The applicant must verify their email first.",
       });
     }
 
-    // Convert an approved customer applicant into a seller.
     applicant.role = "seller";
     applicant.sellerStatus = "approved";
+    applicant.verificationStatus = "approved";
+    applicant.adminReviewNote = "";
     applicant.sellerApplication.reviewedAt = new Date();
 
     await applicant.save();
 
     return res.status(200).json({
-      message: "Seller application approved successfully",
+      message: "Seller application approved.",
       seller: {
         _id: applicant._id,
         name: applicant.name,
         email: applicant.email,
         role: applicant.role,
         sellerStatus: applicant.sellerStatus,
+        verificationStatus: applicant.verificationStatus,
       },
     });
   } catch (error) {
-    console.error("Approve seller error:", error);
-    return res.status(500).json({
-      message: "Failed to approve seller application",
-    });
+    console.error("Approve seller:", error);
+    return res.status(500).json({ message: "Unable to approve seller." });
   }
 };
 
 const rejectSeller = async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid applicant ID." });
+    }
+
     const applicant = await User.findById(req.params.id);
 
     if (
@@ -279,37 +253,36 @@ const rejectSeller = async (req, res) => {
       !["customer", "seller"].includes(applicant.role)
     ) {
       return res.status(404).json({
-        message: "Pending seller application not found",
+        message: "Pending seller application not found.",
       });
     }
 
-    applicant.sellerStatus = "rejected";
+    const reviewNote = String(req.body.reviewNote || "").trim();
 
-    // A customer remains a customer if their application is rejected.
-    // An existing seller registration remains a seller.
+    applicant.sellerStatus = "rejected";
+    applicant.verificationStatus = "rejected";
+    applicant.adminReviewNote = reviewNote;
+    applicant.sellerApplication.reviewNote = reviewNote;
     applicant.sellerApplication.reviewedAt = new Date();
 
     await applicant.save();
 
     return res.status(200).json({
-      message: "Seller application rejected",
+      message: "Seller application rejected.",
       applicant: {
         _id: applicant._id,
         name: applicant.name,
         email: applicant.email,
         role: applicant.role,
         sellerStatus: applicant.sellerStatus,
+        verificationStatus: applicant.verificationStatus,
       },
     });
   } catch (error) {
-    console.error("Reject seller error:", error);
-    return res.status(500).json({
-      message: "Failed to reject seller application",
-    });
+    console.error("Reject seller:", error);
+    return res.status(500).json({ message: "Unable to reject seller." });
   }
 };
-
-
 
 module.exports = {
   getAllUsers,

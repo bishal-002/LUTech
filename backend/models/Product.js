@@ -1,32 +1,48 @@
 
 const mongoose = require("mongoose");
 
-// ---------------------------------------------
-// Helper: Generate URL-friendly slugs
-// ---------------------------------------------
-function createSlug(value) {
-  return value
-    .toString()
+// ======================================================
+// HELPERS
+// ======================================================
+
+const createSlug = (value) =>
+  String(value || "")
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
 
-// ---------------------------------------------
-// Product image schema
-// ---------------------------------------------
+const isValidUrl = (value) => {
+  if (!value) return true;
+
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol);
+  } catch {
+    return false;
+  }
+};
+
+// ======================================================
+// PRODUCT IMAGE SCHEMA
+// ======================================================
+
 const productImageSchema = new mongoose.Schema(
   {
     url: {
       type: String,
       required: true,
       trim: true,
+      validate: {
+        validator: isValidUrl,
+        message: "Please provide a valid image URL.",
+      },
     },
 
     slot: {
       type: String,
       enum: ["main", "ports", "packaging", "scale", "extra"],
+      required: true,
       default: "extra",
     },
 
@@ -39,9 +55,10 @@ const productImageSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// ---------------------------------------------
-// Product variant schema
-// ---------------------------------------------
+// ======================================================
+// PRODUCT VARIANT SCHEMA
+// ======================================================
+
 const variantSchema = new mongoose.Schema(
   {
     sku: {
@@ -49,6 +66,7 @@ const variantSchema = new mongoose.Schema(
       required: true,
       trim: true,
       uppercase: true,
+      maxlength: 50,
     },
 
     attributes: {
@@ -73,18 +91,33 @@ const variantSchema = new mongoose.Schema(
       required: true,
       min: 0,
       default: 0,
+      validate: {
+        validator: Number.isInteger,
+        message: "Stock quantity must be a whole number.",
+      },
     },
 
     lowStockThreshold: {
       type: Number,
       min: 0,
       default: 3,
+      validate: {
+        validator: Number.isInteger,
+        message: "Low stock threshold must be a whole number.",
+      },
     },
 
     maxOrderQuantity: {
       type: Number,
       min: 1,
       default: null,
+      validate: {
+        validator: (value) =>
+          value === null ||
+          value === undefined ||
+          Number.isInteger(value),
+        message: "Maximum order quantity must be a whole number.",
+      },
     },
 
     isDefault: {
@@ -103,6 +136,7 @@ variantSchema.pre("validate", function () {
   if (
     this.salePrice !== null &&
     this.salePrice !== undefined &&
+    this.regularPrice !== undefined &&
     this.salePrice >= this.regularPrice
   ) {
     this.invalidate(
@@ -110,11 +144,24 @@ variantSchema.pre("validate", function () {
       "Sale price must be lower than regular price."
     );
   }
+
+  if (
+    this.maxOrderQuantity !== null &&
+    this.maxOrderQuantity !== undefined &&
+    this.stockQuantity !== undefined &&
+    this.maxOrderQuantity < 1
+  ) {
+    this.invalidate(
+      "maxOrderQuantity",
+      "Maximum order quantity must be at least 1."
+    );
+  }
 });
 
-// ---------------------------------------------
-// Product technical specification schema
-// ---------------------------------------------
+// ======================================================
+// TECHNICAL SPECIFICATION SCHEMA
+// ======================================================
+
 const specificationSchema = new mongoose.Schema(
   {
     group: {
@@ -143,15 +190,20 @@ const specificationSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// ---------------------------------------------
-// Product box contents schema
-// ---------------------------------------------
+// ======================================================
+// BOX CONTENTS SCHEMA
+// ======================================================
+
 const boxContentSchema = new mongoose.Schema(
   {
     qty: {
       type: Number,
       required: true,
       min: 1,
+      validate: {
+        validator: Number.isInteger,
+        message: "Quantity must be a whole number.",
+      },
     },
 
     item: {
@@ -163,9 +215,10 @@ const boxContentSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// ---------------------------------------------
-// Variant option schema
-// ---------------------------------------------
+// ======================================================
+// VARIANT OPTION SCHEMA
+// ======================================================
+
 const variantOptionSchema = new mongoose.Schema(
   {
     name: {
@@ -179,20 +232,31 @@ const variantOptionSchema = new mongoose.Schema(
       default: [],
       validate: {
         validator: (values) =>
-          Array.isArray(values) && values.length > 0,
-        message: "Each variant option must have at least one value.",
+          Array.isArray(values) &&
+          values.length > 0 &&
+          values.every(
+            (value) =>
+              typeof value === "string" &&
+              value.trim().length > 0
+          ),
+        message:
+          "Each variant option must have at least one valid value.",
       },
     },
   },
   { _id: false }
 );
 
-// ---------------------------------------------
-// Main product schema
-// ---------------------------------------------
+// ======================================================
+// MAIN PRODUCT SCHEMA
+// ======================================================
+
 const productSchema = new mongoose.Schema(
   {
-    // Product identity
+    // --------------------------------------------------
+    // PRODUCT IDENTITY
+    // --------------------------------------------------
+
     title: {
       type: String,
       required: true,
@@ -212,7 +276,7 @@ const productSchema = new mongoose.Schema(
     brandId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Brand",
-      default: null,
+      required: true,
     },
 
     mpn: {
@@ -220,12 +284,13 @@ const productSchema = new mongoose.Schema(
       required: true,
       trim: true,
       uppercase: true,
+      maxlength: 100,
     },
 
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
-      default: null,
+      required: true,
     },
 
     tags: {
@@ -244,7 +309,10 @@ const productSchema = new mongoose.Schema(
       },
     },
 
-    // Authenticity and condition
+    // --------------------------------------------------
+    // AUTHENTICITY AND CONDITION
+    // --------------------------------------------------
+
     condition: {
       type: String,
       enum: [
@@ -262,6 +330,7 @@ const productSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
+      maxlength: 500,
     },
 
     regionVariant: {
@@ -294,7 +363,10 @@ const productSchema = new mongoose.Schema(
       default: "",
     },
 
-    // Product images and video
+    // --------------------------------------------------
+    // PRODUCT IMAGES AND VIDEO
+    // --------------------------------------------------
+
     images: {
       type: [productImageSchema],
       default: [],
@@ -304,14 +376,6 @@ const productSchema = new mongoose.Schema(
             return false;
           }
 
-          const hasMainImage = images.some(
-            (image) => image.slot === "main"
-          );
-
-          const hasPortsImage = images.some(
-            (image) => image.slot === "ports"
-          );
-
           const mainCount = images.filter(
             (image) => image.slot === "main"
           ).length;
@@ -320,12 +384,7 @@ const productSchema = new mongoose.Schema(
             (image) => image.slot === "ports"
           ).length;
 
-          return (
-            hasMainImage &&
-            hasPortsImage &&
-            mainCount === 1 &&
-            portsCount === 1
-          );
+          return mainCount === 1 && portsCount === 1;
         },
         message:
           "A product must have exactly one main image and one ports image. Maximum 10 images allowed.",
@@ -336,9 +395,16 @@ const productSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
+      validate: {
+        validator: isValidUrl,
+        message: "Please provide a valid video URL.",
+      },
     },
 
-    // Product description
+    // --------------------------------------------------
+    // PRODUCT DESCRIPTION
+    // --------------------------------------------------
+
     highlights: {
       type: [
         {
@@ -352,8 +418,10 @@ const productSchema = new mongoose.Schema(
         validator: (items) =>
           Array.isArray(items) &&
           items.length >= 3 &&
-          items.length <= 5,
-        message: "A product must have between 3 and 5 highlights.",
+          items.length <= 5 &&
+          items.every((item) => item.length > 0),
+        message:
+          "A product must have between 3 and 5 valid highlights.",
       },
     },
 
@@ -372,11 +440,11 @@ const productSchema = new mongoose.Schema(
     plugType: {
       type: String,
       enum: [
+        "",
         "US 2-Pin (Type A/B)",
         "UK 3-Pin (Type G)",
         "EU 2-Pin (Type C/F)",
         "Universal / USB-Powered",
-        "",
       ],
       default: "",
     },
@@ -386,7 +454,10 @@ const productSchema = new mongoose.Schema(
       default: false,
     },
 
-    // Variants and inventory
+    // --------------------------------------------------
+    // VARIANTS AND INVENTORY
+    // --------------------------------------------------
+
     hasVariants: {
       type: Boolean,
       default: false,
@@ -412,7 +483,10 @@ const productSchema = new mongoose.Schema(
       },
     },
 
-    // Warranty and returns
+    // --------------------------------------------------
+    // WARRANTY AND RETURNS
+    // --------------------------------------------------
+
     warrantyType: {
       type: String,
       enum: [
@@ -456,7 +530,10 @@ const productSchema = new mongoose.Schema(
       default: "Non-Returnable",
     },
 
-    // Shipping
+    // --------------------------------------------------
+    // SHIPPING
+    // --------------------------------------------------
+
     shipping: {
       weightGrams: {
         type: Number,
@@ -501,27 +578,37 @@ const productSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Technical specifications
+    // --------------------------------------------------
+    // TECHNICAL SPECIFICATIONS
+    // --------------------------------------------------
+
     specifications: {
       type: [specificationSchema],
       default: [],
     },
 
-    // Seller references
+    // --------------------------------------------------
+    // SELLER REFERENCES
+    // --------------------------------------------------
+
     sellerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      default: null,
+      required: true,
     },
 
+    // Legacy seller reference retained during migration.
     seller: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
     },
 
-    // Legacy compatibility fields
-    // Remove only after frontend and controllers are migrated.
+    // --------------------------------------------------
+    // LEGACY FRONTEND COMPATIBILITY
+    // Remove after frontend migration is complete.
+    // --------------------------------------------------
+
     name: {
       type: String,
       trim: true,
@@ -545,9 +632,10 @@ const productSchema = new mongoose.Schema(
   }
 );
 
-// ---------------------------------------------
-// Product-level validation and synchronization
-// ---------------------------------------------
+// ======================================================
+// PRODUCT VALIDATION AND SYNCHRONIZATION
+// ======================================================
+
 productSchema.pre("validate", function () {
   // Synchronize legacy name and new title.
   if (!this.title && this.name) {
@@ -563,7 +651,8 @@ productSchema.pre("validate", function () {
     this.mpn = this.mpn.trim().toUpperCase();
   }
 
-  // Generate slug.
+  // Generate slug only when one does not already exist.
+  // Existing slugs remain stable.
   if (!this.slug && this.title) {
     this.slug = createSlug(
       `${this.title}-${this.mpn || this._id}`
@@ -572,12 +661,8 @@ productSchema.pre("validate", function () {
     this.slug = createSlug(this.slug);
   }
 
-  // Legacy image is retained for backward compatibility.
-  // New products must provide the required images array:
-  // exactly one main image and exactly one ports image.
-
   // Synchronize legacy image field.
-  if (this.images.length > 0) {
+  if (this.images && this.images.length > 0) {
     const mainImage = this.images.find(
       (item) => item.slot === "main"
     );
@@ -587,8 +672,12 @@ productSchema.pre("validate", function () {
     }
   }
 
-  // Convert old price into a default variant.
-  if (this.variants.length === 0 && this.price !== null) {
+  // Legacy price conversion.
+  if (
+    this.variants.length === 0 &&
+    this.price !== null &&
+    this.price !== undefined
+  ) {
     this.variants.push({
       sku: `LEGACY-${this._id}`,
       attributes: {},
@@ -599,18 +688,25 @@ productSchema.pre("validate", function () {
     });
   }
 
-  // Variant consistency checks.
+  // Variant validation and synchronization.
   if (this.variants.length > 0) {
     const defaultVariants = this.variants.filter(
       (variant) => variant.isDefault
     );
 
     // Automatically select the only variant as default.
-    if (this.variants.length === 1 && defaultVariants.length === 0) {
+    if (
+      this.variants.length === 1 &&
+      defaultVariants.length === 0
+    ) {
       this.variants[0].isDefault = true;
     }
 
-    if (this.variants.length > 1 && defaultVariants.length !== 1) {
+    // Multiple variants require exactly one default.
+    if (
+      this.variants.length > 1 &&
+      defaultVariants.length !== 1
+    ) {
       this.invalidate(
         "variants",
         "A product with multiple variants must have exactly one default variant."
@@ -629,9 +725,10 @@ productSchema.pre("validate", function () {
       );
     }
 
-    // Synchronize legacy price from the default variant.
-    const defaultVariant =
-      this.variants.find((variant) => variant.isDefault);
+    // Synchronize legacy price from default variant.
+    const defaultVariant = this.variants.find(
+      (variant) => variant.isDefault
+    );
 
     if (defaultVariant) {
       this.price =
@@ -654,6 +751,17 @@ productSchema.pre("validate", function () {
     );
   }
 
+  // Variant options should match the hasVariants setting.
+  if (
+    this.hasVariants &&
+    this.variantOptions.length === 0
+  ) {
+    this.invalidate(
+      "variantOptions",
+      "Variant options are required when a product has variants."
+    );
+  }
+
   // Condition notes are required for non-sealed products.
   if (
     this.condition !== "new_sealed" &&
@@ -665,7 +773,7 @@ productSchema.pre("validate", function () {
     );
   }
 
-  // Warranty duration is required when a warranty is offered.
+  // Warranty duration is required when warranty is offered.
   if (
     this.warrantyType !== "No Warranty" &&
     !this.warrantyDuration?.value &&
@@ -688,7 +796,15 @@ productSchema.pre("validate", function () {
     );
   }
 
-  // Synchronize seller references during the transition.
+  // A non-preorder product should not retain a preorder date.
+  if (
+    this.dispatchTime !== "Pre-Order" &&
+    this.preorderReleaseDate
+  ) {
+    this.preorderReleaseDate = null;
+  }
+
+  // Synchronize seller references during migration.
   if (!this.sellerId && this.seller) {
     this.sellerId = this.seller;
   }
@@ -698,18 +814,36 @@ productSchema.pre("validate", function () {
   }
 });
 
-// ---------------------------------------------
-// Indexes
-// ---------------------------------------------
-productSchema.index({ title: "text", tags: "text" });
-productSchema.index({ categoryId: 1, createdAt: -1 });
-productSchema.index({ brandId: 1 });
-productSchema.index({ sellerId: 1 });
-productSchema.index({ "variants.sku": 1 });
+// ======================================================
+// INDEXES
+// ======================================================
 
-// ---------------------------------------------
-// Export model
-// ---------------------------------------------
+productSchema.index({
+  title: "text",
+  tags: "text",
+});
+
+productSchema.index({
+  categoryId: 1,
+  createdAt: -1,
+});
+
+productSchema.index({
+  brandId: 1,
+});
+
+productSchema.index({
+  sellerId: 1,
+});
+
+productSchema.index({
+  "variants.sku": 1,
+});
+
+// ======================================================
+// EXPORT MODEL
+// ======================================================
+
 module.exports =
   mongoose.models.Product ||
   mongoose.model("Product", productSchema);

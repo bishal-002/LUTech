@@ -7,23 +7,15 @@ const {
   updateSellerOrderStatus,
 } = require("../controllers/orderController");
 
-const {
-  protect,
-  sellerOnly,
-} = require("../middleware/authMiddleware");
+const { protect, sellerOnly } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// All routes require approved Seller authentication
 router.use(protect, sellerOnly);
 
-// Get all seller orders
 router.get("/", getSellerOrders);
-
-// Get single seller order
 router.get("/:id", getSellerOrderById);
-
-// Update seller order status
+router.patch("/:id/status", updateSellerOrderStatus);
 router.put("/:id/status", updateSellerOrderStatus);
 
 module.exports = router;

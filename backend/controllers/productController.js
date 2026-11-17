@@ -2,11 +2,12 @@
 const mongoose = require("mongoose");
 const Product = require("../models/Product");
 
-// Fields that can be submitted when creating or updating a product.
-// Seller ownership fields are deliberately excluded.
-const allowedFields = [
+// ======================================================
+// CONFIGURATION
+// ======================================================
+
+const ALLOWED_PRODUCT_FIELDS = [
   "title",
-  "slug",
   "brandId",
   "mpn",
   "categoryId",
@@ -35,12 +36,22 @@ const allowedFields = [
   "specifications",
 ];
 
-// Pick only fields supported by the Product model.
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 12;
+const MAX_LIMIT = 100;
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const hasOwn = (object, key) =>
+  Object.prototype.hasOwnProperty.call(object, key);
+
 const getProductData = (body = {}) => {
   const data = {};
 
-  for (const field of allowedFields) {
-    if (Object.prototype.hasOwnProperty.call(body, field)) {
+  for (const field of ALLOWED_PRODUCT_FIELDS) {
+    if (hasOwn(body, field)) {
       data[field] = body[field];
     }
   }
@@ -48,18 +59,51 @@ const getProductData = (body = {}) => {
   return data;
 };
 
-// Consistent error responses.
+const isValidObjectId = (id) =>
+  mongoose.isValidObjectId(id);
+
+const getSellerId = (user) =>
+  user?._id || user?.id || null;
+
+const isAdmin = (user) => user?.role === "admin";
+
+const getPagination = (query = {}) => {
+  const requestedPage = Number.parseInt(query.page, 10);
+  const requestedLimit = Number.parseInt(query.limit, 10);
+
+  const page =
+    Number.isInteger(requestedPage) && requestedPage > 0
+      ? requestedPage
+      : DEFAULT_PAGE;
+
+  const limit =
+    Number.isInteger(requestedLimit) && requestedLimit > 0
+      ? Math.min(requestedLimit, MAX_LIMIT)
+      : DEFAULT_LIMIT;
+
+  return {
+    page,
+    limit,
+    skip: (page - 1) * limit,
+  };
+};
+
 const handleProductError = (res, error) => {
   console.error("Product Controller Error:", error);
 
   if (error.name === "ValidationError") {
     return res.status(400).json({
       message: "Product validation failed.",
-      errors: Object.values(error.errors).map((item) => item.message),
+      errors: Object.values(error.errors).map(
+        (item) => item.message
+      ),
     });
   }
 
-  if (error.name === "CastError" || error.name === "BSONError") {
+  if (
+    error.name === "CastError" ||
+    error.name === "BSONError"
+  ) {
     return res.status(400).json({
       message: "Invalid product data or ID.",
     });
@@ -68,7 +112,8 @@ const handleProductError = (res, error) => {
   if (error.code === 11000) {
     return res.status(409).json({
       message: "A product with this unique value already exists.",
-      field: Object.keys(error.keyValue || {})[0] || "unknown",
+      field:
+        Object.keys(error.keyValue || {})[0] || "unknown",
     });
   }
 
@@ -77,20 +122,90 @@ const handleProductError = (res, error) => {
   });
 };
 
-// Create Product
+// Restrict seller access to their own products.
+// Admins can access all products.
+const getProductOwnershipFilter = (user, productId = null) => {
+  const filter = {};
+
+  if (productId) {
+    filter._id = productId;
+  }
+
+  if (!isAdmin(user)) {
+    const sellerId = getSellerId(user);
+
+    filter.$or = [
+      { sellerId },
+      { seller: sellerId },
+    ];
+  }
+
+  return filter;
+};
+
+// ======================================================
+// CREATE PRODUCT
+// ======================================================
+
 const createProduct = async (req, res) => {
   try {
+    const user = req.user;
+
+    if (!user || !["seller", "admin"].includes(user.role)) {
+      return res.status(403).json({
+        message: "Only sellers and administrators can create products.",
+      });
+    }
+
     const productData = getProductData(req.body);
 
-    if (req.user.role === "seller") {
-      // Never accept seller ownership from the frontend.
-      productData.sellerId = req.user._id;
-      productData.seller = req.user._id;
+    if (!productData.title) {
+      return res.status(400).json({
+        message: "Product title is required.",
+      });
     }
+
+    if (!productData.brandId) {
+      return res.status(400).json({
+        message: "Brand is required.",
+      });
+    }
+
+    if (!productData.categoryId) {
+      return res.status(400).json({
+        message: "Category is required.",
+      });
+    }
+
+    if (!productData.images) {
+      return res.status(400).json({
+        message: "Product images are required.",
+      });
+    }
+
+    if (!productData.variants) {
+      return res.status(400).json({
+        message: "At least one product variant is required.",
+      });
+    }
+
+    // Ownership is always assigned by the backend.
+    // A seller cannot create a product for another seller.
+    const sellerId = getSellerId(user);
+
+    if (!sellerId) {
+      return res.status(400).json({
+        message: "Unable to identify the product owner.",
+      });
+    }
+
+    productData.sellerId = sellerId;
+    productData.seller = sellerId;
 
     const product = await Product.create(productData);
 
     return res.status(201).json({
+      success: true,
       message: "Product created successfully.",
       product,
     });
@@ -99,30 +214,226 @@ const createProduct = async (req, res) => {
   }
 };
 
-// Get All Products
+// ======================================================
+// GET ALL PRODUCTS
+// ======================================================
+
 const getProducts = async (req, res) => {
   try {
-    const products = await Product.find({})
-      .sort({ createdAt: -1 });
+    const {
+      page,
+      limit,
+      skip,
+    } = getPagination(req.query);
 
-    return res.status(200).json(products);
+    const filter = {};
+
+    // Search by title, tags, or MPN.
+    if (req.query.search?.trim()) {
+      const searchTerm = req.query.search.trim();
+
+      filter.$or = [
+        {
+          title: {
+            $regex: searchTerm,
+            $options: "i",
+          },
+        },
+        {
+          tags: {
+            $regex: searchTerm,
+            $options: "i",
+          },
+        },
+        {
+          mpn: {
+            $regex: searchTerm,
+            $options: "i",
+          },
+        },
+      ];
+    }
+
+    // Category filtering.
+    if (req.query.categoryId) {
+      if (!isValidObjectId(req.query.categoryId)) {
+        return res.status(400).json({
+          message: "Invalid category ID.",
+        });
+      }
+
+      filter.categoryId = req.query.categoryId;
+    }
+
+    // Brand filtering.
+    if (req.query.brandId) {
+      if (!isValidObjectId(req.query.brandId)) {
+        return res.status(400).json({
+          message: "Invalid brand ID.",
+        });
+      }
+
+      filter.brandId = req.query.brandId;
+    }
+
+    // Condition filtering.
+    if (req.query.condition) {
+      filter.condition = req.query.condition;
+    }
+
+    // Region filtering.
+    if (req.query.regionVariant) {
+      filter.regionVariant = req.query.regionVariant;
+    }
+
+    // Seller filtering.
+    if (req.query.sellerId) {
+      if (!isValidObjectId(req.query.sellerId)) {
+        return res.status(400).json({
+          message: "Invalid seller ID.",
+        });
+      }
+
+      filter.$and = [
+        {
+          $or: [
+            { sellerId: req.query.sellerId },
+            { seller: req.query.sellerId },
+          ],
+        },
+      ];
+    }
+
+    // Price filtering using variant prices.
+    const minPrice =
+      req.query.minPrice !== undefined
+        ? Number(req.query.minPrice)
+        : null;
+
+    const maxPrice =
+      req.query.maxPrice !== undefined
+        ? Number(req.query.maxPrice)
+        : null;
+
+    if (
+      minPrice !== null &&
+      (!Number.isFinite(minPrice) || minPrice < 0)
+    ) {
+      return res.status(400).json({
+        message: "Invalid minimum price.",
+      });
+    }
+
+    if (
+      maxPrice !== null &&
+      (!Number.isFinite(maxPrice) || maxPrice < 0)
+    ) {
+      return res.status(400).json({
+        message: "Invalid maximum price.",
+      });
+    }
+
+    if (
+      minPrice !== null &&
+      maxPrice !== null &&
+      minPrice > maxPrice
+    ) {
+      return res.status(400).json({
+        message: "Minimum price cannot exceed maximum price.",
+      });
+    }
+
+    if (minPrice !== null || maxPrice !== null) {
+      const priceFilter = {};
+
+      if (minPrice !== null) {
+        priceFilter.$gte = minPrice;
+      }
+
+      if (maxPrice !== null) {
+        priceFilter.$lte = maxPrice;
+      }
+
+      filter.variants = {
+        $elemMatch: {
+          $or: [
+            { salePrice: priceFilter },
+            {
+              $and: [
+                {
+                  $or: [
+                    { salePrice: null },
+                    { salePrice: { $exists: false } },
+                  ],
+                },
+                { regularPrice: priceFilter },
+              ],
+            },
+          ],
+        },
+      };
+    }
+
+    // Sorting.
+    const sortOptions = {
+      newest: { createdAt: -1 },
+      oldest: { createdAt: 1 },
+      price_low: { price: 1 },
+      price_high: { price: -1 },
+      name_asc: { title: 1 },
+      name_desc: { title: -1 },
+    };
+
+    const sort =
+      sortOptions[req.query.sort] ||
+      sortOptions.newest;
+
+    const [products, total] = await Promise.all([
+      Product.find(filter)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate("brandId", "name")
+        .populate("categoryId", "name")
+        .populate("sellerId", "name")
+        .lean(),
+
+      Product.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: products.length,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      products,
+    });
   } catch (error) {
     return handleProductError(res, error);
   }
 };
 
-// Get Single Product
+// ======================================================
+// GET SINGLE PRODUCT
+// ======================================================
+
 const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (!mongoose.isValidObjectId(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({
         message: "Invalid product ID.",
       });
     }
 
-    const product = await Product.findById(id);
+    const product = await Product.findById(id)
+      .populate("brandId", "name")
+      .populate("categoryId", "name")
+      .populate("sellerId", "name")
+      .lean();
 
     if (!product) {
       return res.status(404).json({
@@ -130,18 +441,25 @@ const getProductById = async (req, res) => {
       });
     }
 
-    return res.status(200).json(product);
+    return res.status(200).json({
+      success: true,
+      product,
+    });
   } catch (error) {
     return handleProductError(res, error);
   }
 };
 
-// Update Product
+// ======================================================
+// UPDATE PRODUCT
+// ======================================================
+
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
+    const user = req.user;
 
-    if (!mongoose.isValidObjectId(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({
         message: "Invalid product ID.",
       });
@@ -155,15 +473,7 @@ const updateProduct = async (req, res) => {
       });
     }
 
-    // Sellers can update only products belonging to their account.
-    const filter = { _id: id };
-
-    if (req.user.role === "seller") {
-      filter.$or = [
-        { sellerId: req.user._id },
-        { seller: req.user._id },
-      ];
-    }
+    const filter = getProductOwnershipFilter(user, id);
 
     const product = await Product.findOne(filter);
 
@@ -173,11 +483,16 @@ const updateProduct = async (req, res) => {
       });
     }
 
+    // Prevent accidental ownership changes.
+    delete updateData.sellerId;
+    delete updateData.seller;
+
     product.set(updateData);
 
     const updatedProduct = await product.save();
 
     return res.status(200).json({
+      success: true,
       message: "Product updated successfully.",
       product: updatedProduct,
     });
@@ -186,26 +501,21 @@ const updateProduct = async (req, res) => {
   }
 };
 
-// Delete Product
+// ======================================================
+// DELETE PRODUCT
+// ======================================================
+
 const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (!mongoose.isValidObjectId(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({
         message: "Invalid product ID.",
       });
     }
 
-    const filter = { _id: id };
-
-    // Sellers can delete only their own products.
-    if (req.user.role === "seller") {
-      filter.$or = [
-        { sellerId: req.user._id },
-        { seller: req.user._id },
-      ];
-    }
+    const filter = getProductOwnershipFilter(req.user, id);
 
     const product = await Product.findOne(filter);
 
@@ -218,6 +528,7 @@ const deleteProduct = async (req, res) => {
     await product.deleteOne();
 
     return res.status(200).json({
+      success: true,
       message: "Product deleted successfully.",
     });
   } catch (error) {
@@ -225,24 +536,62 @@ const deleteProduct = async (req, res) => {
   }
 };
 
-// Get Products Belonging to the Logged-in Seller
+// ======================================================
+// GET LOGGED-IN SELLER'S PRODUCTS
+// ======================================================
+
 const getMyProducts = async (req, res) => {
   try {
-    const products = await Product.find({
+    const sellerId = getSellerId(req.user);
+
+    if (!sellerId) {
+      return res.status(400).json({
+        message: "Unable to identify the seller.",
+      });
+    }
+
+    const {
+      page,
+      limit,
+      skip,
+    } = getPagination(req.query);
+
+    const filter = {
       $or: [
-        { sellerId: req.user._id },
-        { seller: req.user._id },
+        { sellerId },
+        { seller: sellerId },
       ],
-    }).sort({ createdAt: -1 });
+    };
+
+    const [products, total] = await Promise.all([
+      Product.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("brandId", "name")
+        .populate("categoryId", "name")
+        .lean(),
+
+      Product.countDocuments(filter),
+    ]);
 
     return res.status(200).json({
+      success: true,
       count: products.length,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
       products,
     });
   } catch (error) {
     return handleProductError(res, error);
   }
 };
+
+// ======================================================
+// EXPORT CONTROLLERS
+// ======================================================
 
 module.exports = {
   createProduct,
