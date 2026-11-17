@@ -576,6 +576,8 @@ const userSchema = new mongoose.Schema(
   {
     timestamps: true,
     minimize: false,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
@@ -696,6 +698,16 @@ userSchema.pre("validate", function (next) {
 
   next();
 });
+
+// Compatibility aliases for the customer-field specification.
+// Existing code continues to use name/isVerified without a breaking migration.
+userSchema.virtual("fullName")
+  .get(function () { return this.name; })
+  .set(function (value) { this.name = value; });
+
+userSchema.virtual("isEmailVerified")
+  .get(function () { return this.isVerified; })
+  .set(function (value) { this.isVerified = value; });
 
 // ======================================================
 // INDEXES
