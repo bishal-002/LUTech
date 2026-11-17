@@ -8,6 +8,11 @@ const {
   getUserProfile,
   updateUserProfile,
   deleteUserProfile,
+  addToWishlist,
+  removeFromWishlist,
+  addPriceAlert,
+  removePriceAlert,
+  addRecentlyViewed,
   applyToBecomeSeller,
   getSellerApplicationStatus,
 } = require("../controllers/userController");
@@ -49,6 +54,13 @@ router.put("/profile/:id", updateUserProfile);
 
 // Delete user profile
 router.delete("/profile/:id", deleteUserProfile);
+
+// Customer-only shopping profile features
+router.post("/customer/wishlist", addToWishlist);
+router.delete("/customer/wishlist/:productId", removeFromWishlist);
+router.post("/customer/price-alerts", addPriceAlert);
+router.delete("/customer/price-alerts/:productId", removePriceAlert);
+router.post("/customer/recently-viewed", addRecentlyViewed);
 
 /*
 |--------------------------------------------------------------------------
