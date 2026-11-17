@@ -86,9 +86,9 @@ const registerUser = async (req, res) => {
       });
     }
 
-    if (name.trim().length < 2 || name.trim().length > 100) {
+    if (name.trim().length < 2 || name.trim().length > 80) {
       return res.status(400).json({
-        message: "Name must be between 2 and 100 characters.",
+        message: "Name must be between 2 and 80 characters.",
       });
     }
 
@@ -586,17 +586,17 @@ const addPriceAlert = async (req, res) => {
     if (req.user.role !== "customer") return res.status(403).json({ message: "Customer access only." });
     const { productId, variantSku = "", targetPrice, notifyOnRestock = true } = req.body;
     const price = Number(targetPrice);
-    if (!mongoose.isValidObjectId(productId) || !Number.isFinite(price) || price < 0 ||
+    if (targetPrice === undefined || targetPrice === null || targetPrice === "" || !mongoose.isValidObjectId(productId) || !Number.isFinite(price) || price < 0 ||
         typeof variantSku !== "string" || variantSku.length > 80 || typeof notifyOnRestock !== "boolean") {
       return res.status(400).json({ message: "Provide a valid product, variant SKU, target price and restock preference." });
     }
     if (!(await Product.exists({ _id: productId }))) return res.status(404).json({ message: "Product not found." });
     const user = await User.findById(req.user._id);
-    if (user.priceAlerts.length >= 20 && !user.priceAlerts.some((item) => item.productId.toString() === productId)) {
-      return res.status(400).json({ message: "You can save a maximum of 20 price alerts." });
-    }
     const sku = variantSku.trim().toUpperCase();
     const existing = user.priceAlerts.find((item) => item.productId.toString() === productId && item.variantSku === sku);
+    if (user.priceAlerts.length >= 20 && !existing) {
+      return res.status(400).json({ message: "You can save a maximum of 20 price alerts." });
+    }
     if (existing) {
       existing.targetPrice = price;
       existing.notifyOnRestock = notifyOnRestock;
