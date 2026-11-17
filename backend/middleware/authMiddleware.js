@@ -39,7 +39,7 @@ const protect = async (req, res, next) => {
     }
 
     const user = await User.findById(userId).select(
-      "_id name email role isVerified sellerStatus verificationStatus"
+      "_id name email role isVerified status sellerStatus verificationStatus"
     );
 
     if (!user) {
@@ -51,6 +51,14 @@ const protect = async (req, res, next) => {
     if (!user.isVerified) {
       return res.status(403).json({
         message: "Please verify your email before continuing.",
+      });
+    }
+
+    if (user.status && user.status !== "active") {
+      return res.status(403).json({
+        message: user.status === "deactivated"
+          ? "This account has been deactivated."
+          : "Your account has been suspended.",
       });
     }
 
