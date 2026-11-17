@@ -17,6 +17,50 @@ const addressSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Customer-only subdocuments. Kept separate from seller schemas.
+const customerAddressSchema = new mongoose.Schema({
+  label: { type: String, enum: ["Home", "Office", "Campus / Hostel", "Other"], default: "Home" },
+  recipientName: { type: String, trim: true, maxlength: 80, default: "" },
+  recipientPhone: { type: String, trim: true, maxlength: 20, default: "" },
+  division: { type: String, trim: true, default: "" },
+  district: { type: String, trim: true, default: "" },
+  area: { type: String, trim: true, default: "" },
+  streetAddress: { type: String, trim: true, maxlength: 200, default: "" },
+  postalCode: { type: String, trim: true, default: "" },
+  isDefaultShipping: { type: Boolean, default: false },
+  isDefaultBilling: { type: Boolean, default: false },
+}, { _id: true });
+
+const customerWishlistSchema = new mongoose.Schema({
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+  variantSku: { type: String, trim: true, uppercase: true, default: "" },
+  addedAt: { type: Date, default: Date.now },
+}, { _id: false });
+
+const customerPriceAlertSchema = new mongoose.Schema({
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+  variantSku: { type: String, trim: true, uppercase: true, default: "" },
+  targetPrice: { type: Number, min: 0, required: true },
+  notifyOnRestock: { type: Boolean, default: true },
+}, { _id: false });
+
+const ownedDeviceSchema = new mongoose.Schema({
+  brand: { type: String, trim: true, maxlength: 80, default: "" },
+  model: { type: String, trim: true, maxlength: 100, default: "" },
+  category: { type: String, trim: true, maxlength: 80, default: "" },
+}, { _id: false });
+
+const customerPreferencesSchema = new mongoose.Schema({
+  orderUpdatesSms: { type: Boolean, default: true },
+  priceDropEmails: { type: Boolean, default: true },
+  warrantyExpiryReminders: { type: Boolean, default: true },
+}, { _id: false });
+
+const customerBillingProfileSchema = new mongoose.Schema({
+  companyName: { type: String, trim: true, maxlength: 120, default: "" },
+  binNumber: { type: String, trim: true, maxlength: 30, default: "" },
+}, { _id: false });
+
 const supportHoursSchema = new mongoose.Schema(
   {
     monday: { type: String, trim: true, default: "Closed" },
@@ -292,6 +336,91 @@ const userSchema = new mongoose.Schema(
     },
 
     // --------------------------------------------------
+    // CUSTOMER ACCOUNT AND SHOPPING PROFILE
+    // --------------------------------------------------
+
+    phone: {
+      type: String,
+      trim: true,
+      default: undefined,
+      maxlength: 20,
+      unique: true,
+      sparse: true,
+    },
+
+    googleId: {
+      type: String,
+      trim: true,
+      default: undefined,
+      unique: true,
+      sparse: true,
+      select: false,
+    },
+
+    status: {
+      type: String,
+      enum: ["active", "suspended", "deactivated"],
+      default: "active",
+      index: true,
+    },
+
+    isPhoneVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    avatarUrl: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 2048,
+    },
+
+    addresses: {
+      type: [customerAddressSchema],
+      default: [],
+      validate: {
+        validator: (items) => items.length <= 5,
+        message: "A customer can save a maximum of 5 addresses.",
+      },
+    },
+
+    wishlist: { type: [customerWishlistSchema], default: [] },
+    priceAlerts: { type: [customerPriceAlertSchema], default: [] },
+    ownedDevices: { type: [ownedDeviceSchema], default: [] },
+
+    recentlyViewed: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
+      default: [],
+      validate: {
+        validator: (items) => items.length <= 12,
+        message: "Recently viewed can contain at most 12 products.",
+      },
+    },
+
+    billingProfile: {
+      type: customerBillingProfileSchema,
+      default: () => ({}),
+    },
+
+    preferences: {
+      type: customerPreferencesSchema,
+      default: () => ({}),
+    },
+
+    // Buyer performance data is kept separate from seller metrics.
+    customerMetrics: {
+      deliveredOrders: { type: Number, default: 0, min: 0 },
+      refusedCodOrders: { type: Number, default: 0, min: 0 },
+      totalSpent: { type: Number, default: 0, min: 0 },
+    },
+
+    lastLoginAt: {
+      type: Date,
+      default: null,
+    },
+
+    // --------------------------------------------------
     // SELLER ACCOUNT STATUS
     // --------------------------------------------------
 
@@ -532,6 +661,8 @@ const userSchema = new mongoose.Schema(
   {
     timestamps: true,
     minimize: false,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
@@ -583,6 +714,23 @@ userSchema.pre("validate", function (next) {
       .replace(/^-+|-+$/g, "");
 
     this.storeSlug = baseSlug;
+  }
+
+  // Customer-specific address and history limits.
+  if (Array.isArray(this.addresses)) {
+    if (this.addresses.length > 5) {
+      this.invalidate("addresses", "A maximum of 5 saved addresses is allowed.");
+    }
+    if (this.addresses.filter((item) => item.isDefaultShipping).length > 1) {
+      this.invalidate("addresses", "Only one default shipping address is allowed.");
+    }
+    if (this.addresses.filter((item) => item.isDefaultBilling).length > 1) {
+      this.invalidate("addresses", "Only one default billing address is allowed.");
+    }
+  }
+
+  if (this.recentlyViewed?.length > 12) {
+    this.recentlyViewed = this.recentlyViewed.slice(-12);
   }
 
   // Seller-specific validation.
@@ -652,6 +800,16 @@ userSchema.pre("validate", function (next) {
 
   next();
 });
+
+// Compatibility aliases for the customer-field specification.
+// Existing code continues to use name/isVerified without a breaking migration.
+userSchema.virtual("fullName")
+  .get(function () { return this.name; })
+  .set(function (value) { this.name = value; });
+
+userSchema.virtual("isEmailVerified")
+  .get(function () { return this.isVerified; })
+  .set(function (value) { this.isVerified = value; });
 
 // ======================================================
 // INDEXES
