@@ -86,9 +86,10 @@ const registerUser = async (req, res) => {
       });
     }
 
-    if (name.trim().length < 2 || name.trim().length > 80) {
+    const maximumNameLength = accountType === "customer" ? 80 : 100;
+    if (name.trim().length < 2 || name.trim().length > maximumNameLength) {
       return res.status(400).json({
-        message: "Name must be between 2 and 80 characters.",
+        message: `Name must be between 2 and ${maximumNameLength} characters.`,
       });
     }
 
@@ -395,8 +396,9 @@ const updateUserProfile = async (req, res) => {
     const { address, phone, avatarUrl, addresses, billingProfile, preferences, ownedDevices } = req.body;
 
     if (name !== undefined) {
-      if (typeof name !== "string" || name.trim().length < 2 || name.trim().length > 80) {
-        return res.status(400).json({ message: "Full name must be between 2 and 80 characters." });
+      const maximumNameLength = user.role === "customer" ? 80 : 100;
+      if (typeof name !== "string" || name.trim().length < 2 || name.trim().length > maximumNameLength) {
+        return res.status(400).json({ message: `Full name must be between 2 and ${maximumNameLength} characters.` });
       }
       user.name = name.trim();
     }
