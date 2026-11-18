@@ -6,19 +6,6 @@ import axios from "axios";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 
-const CART_KEY = "cart";
-
-function readCart() {
-  try {
-    const storedCart = localStorage.getItem(CART_KEY);
-    const parsedCart = storedCart ? JSON.parse(storedCart) : [];
-
-    return Array.isArray(parsedCart) ? parsedCart : [];
-  } catch {
-    return [];
-  }
-}
-
 function formatPrice(price) {
   return `৳${Number(price || 0).toLocaleString("en-BD", {
     maximumFractionDigits: 2,
@@ -26,7 +13,8 @@ function formatPrice(price) {
 }
 
 function Cart() {
-  const [cartItems, setCartItems] = useState(readCart);
+  const [cartItems, setCartItems] = useState([]);
+  const [loadingCart, setLoadingCart] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -37,32 +25,152 @@ function Cart() {
   const [submitting, setSubmitting] = useState(false);
   const [orderResult, setOrderResult] = useState(null);
 
+  // Load the authenticated customer's cart from MongoDB.
   useEffect(() => {
-    localStorage.setItem(CART_KEY, JSON.stringify(cartItems));
-  }, [cartItems]);
+    let isMounted = true;
 
-  const updateQuantity = (productId, quantity) => {
+    const fetchCart = async () => {
+      const token = localStorage.getItem("token");
+
+      // Remove the previous local-only cart so it cannot be mistaken
+      // for the backend cart. The server cart is now the source of truth.
+      localStorage.removeItem("cart");
+
+      if (!token) {
+        if (isMounted) {
+          setError("Please log in to view your cart.");
+          setLoadingCart(false);
+        }
+        return;
+      }
+
+      try {
+        const response = await axios.get(
+          "http://localhost:5000/api/cart",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+
+        const formattedItems = (response.data.items || [])
+          .map((cartItem) => {
+            const product =
+              cartItem.productId && typeof cartItem.productId === "object"
+                ? cartItem.productId
+                : null;
+
+            if (!product) return null;
+
+            const variant =
+              product.variants?.find(
+                (item) => String(item._id) === String(cartItem.variantId)
+              ) || null;
+
+            const mainImage =
+              product.images?.find((image) => image.slot === "main") ||
+              product.images?.[0];
+
+            return {
+              cartItemId: cartItem._id,
+              productId: product._id,
+              variantId: cartItem.variantId,
+              name: product.name || product.title || "Unnamed Product",
+              price: variant
+                ? variant.salePrice ?? variant.regularPrice
+                : product.price ?? 0,
+              image: mainImage?.url || product.image || "",
+              quantity: Number(cartItem.quantity) || 1,
+              stockQuantity: Number(variant?.stockQuantity ?? 0),
+              maxOrderQuantity: Number(variant?.maxOrderQuantity || 99),
+              variantLabel: variant?.attributes
+                ? Object.entries(variant.attributes)
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .join(" / ")
+                : variant?.sku || "",
+            };
+          })
+          .filter(Boolean);
+
+        if (isMounted) {
+          setCartItems(formattedItems);
+          setError("");
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(
+            err.response?.data?.message ||
+              "Unable to retrieve your cart. Please refresh and try again."
+          );
+        }
+      } finally {
+        if (isMounted) setLoadingCart(false);
+      }
+    };
+
+    fetchCart();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const updateQuantity = async (cartItemId, quantity) => {
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
       return;
     }
 
-    setCartItems((items) =>
-      items.map((item) =>
-        item.productId === productId ? { ...item, quantity } : item
-      )
-    );
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setError("Please log in to update your cart.");
+      return;
+    }
 
-    setMessage("");
-    setError("");
+    try {
+      setError("");
+      const response = await axios.patch(
+        `http://localhost:5000/api/cart/${cartItemId}`,
+        { quantity },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setCartItems((items) =>
+        items.map((item) =>
+          item.cartItemId === cartItemId
+            ? { ...item, quantity: response.data.item?.quantity ?? quantity }
+            : item
+        )
+      );
+      setMessage("");
+    } catch (err) {
+      setError(
+        err.response?.data?.message || "Unable to update cart quantity."
+      );
+    }
   };
 
-  const removeItem = (productId) => {
-    setCartItems((items) =>
-      items.filter((item) => item.productId !== productId)
-    );
+  const removeItem = async (cartItemId) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setError("Please log in to update your cart.");
+      return;
+    }
 
-    setMessage("");
-    setError("");
+    try {
+      setError("");
+      await axios.delete(
+        `http://localhost:5000/api/cart/${cartItemId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setCartItems((items) =>
+        items.filter((item) => item.cartItemId !== cartItemId)
+      );
+      setMessage("");
+    } catch (err) {
+      setError(
+        err.response?.data?.message || "Unable to remove this item."
+      );
+    }
   };
 
   const subtotal = cartItems.reduce((total, item) => {
@@ -113,10 +221,6 @@ function Cart() {
       const response = await axios.post(
         "http://localhost:5000/api/orders/checkout",
         {
-          items: cartItems.map((item) => ({
-            productId: item.productId,
-            quantity: Number(item.quantity),
-          })),
           shippingName: shippingName.trim(),
           shippingPhone: shippingPhone.trim(),
           shippingAddress: shippingAddress.trim(),
@@ -133,7 +237,6 @@ function Cart() {
 
       // Clear cart only after successful order creation.
       setCartItems([]);
-      localStorage.removeItem(CART_KEY);
 
       setMessage("Your order has been placed successfully!");
     } catch (err) {
@@ -266,8 +369,12 @@ function Cart() {
           </div>
         )}
 
-        {/* Empty Cart */}
-        {cartItems.length === 0 ? (
+        {/* Cart Loading / Empty Cart */}
+        {loadingCart ? (
+          <div className="rounded-2xl border border-[#E5E9E5] bg-white px-5 py-16 text-center text-sm text-[#68766F]">
+            Loading your cart...
+          </div>
+        ) : cartItems.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[#C7D5CA] bg-white px-5 py-16 text-center sm:py-20">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#E5EDE7] text-[#1A2E26]">
               <svg
@@ -320,7 +427,7 @@ function Cart() {
               <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-[#E5E9E5] bg-white">
                 {cartItems.map((item, index) => (
                   <article
-                    key={item.productId}
+                    key={item.cartItemId}
                     className={`grid w-full min-w-0 grid-cols-[56px_minmax(0,1fr)] gap-2 overflow-hidden p-3 sm:flex sm:items-center sm:gap-5 sm:p-5 ${index !== cartItems.length - 1
                       ? "border-b border-[#E5E9E5]"
                       : ""
@@ -362,11 +469,17 @@ function Cart() {
                           <p className="mt-1 text-xs text-[#89958D]">
                             Unit price: {formatPrice(item.price)}
                           </p>
+
+                          {item.variantLabel && (
+                            <p className="mt-1 text-xs text-[#68766F]">
+                              {item.variantLabel}
+                            </p>
+                          )}
                         </div>
 
                         <button
                           type="button"
-                          onClick={() => removeItem(item.productId)}
+                          onClick={() => removeItem(item.cartItemId)}
                           aria-label={`Remove ${item.name} from cart`}
                           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#89958D] transition hover:bg-red-50 hover:text-red-600"
                         >
@@ -397,7 +510,7 @@ function Cart() {
                             <button
                               type="button"
                               onClick={() =>
-                                updateQuantity(item.productId, item.quantity - 1)
+                                updateQuantity(item.cartItemId, item.quantity - 1)
                               }
                               disabled={item.quantity <= 1}
                               aria-label={`Decrease quantity of ${item.name}`}
@@ -413,9 +526,12 @@ function Cart() {
                             <button
                               type="button"
                               onClick={() =>
-                                updateQuantity(item.productId, item.quantity + 1)
+                                updateQuantity(item.cartItemId, item.quantity + 1)
                               }
-                              disabled={item.quantity >= 99}
+                              disabled={
+                                item.quantity >=
+                                Math.min(item.stockQuantity, item.maxOrderQuantity, 99)
+                              }
                               aria-label={`Increase quantity of ${item.name}`}
                               className="flex h-8 w-8 items-center justify-center rounded-r-full text-[#20332B] hover:bg-[#EBF0EB] disabled:opacity-40 sm:h-9 sm:w-9"
                             >

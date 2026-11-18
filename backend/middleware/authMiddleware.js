@@ -1,8 +1,10 @@
-
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-// Protect routes that require an authenticated user
+// ======================================================
+// AUTHENTICATION MIDDLEWARE
+// ======================================================
+
 const protect = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -39,7 +41,7 @@ const protect = async (req, res, next) => {
     }
 
     const user = await User.findById(userId).select(
-      "_id name email role isVerified sellerStatus verificationStatus"
+      "_id name email role isVerified status sellerStatus verificationStatus"
     );
 
     if (!user) {
@@ -54,6 +56,17 @@ const protect = async (req, res, next) => {
       });
     }
 
+    // Customer account status.
+    if (user.status && user.status !== "active") {
+      return res.status(403).json({
+        message:
+          user.status === "deactivated"
+            ? "This account has been deactivated."
+            : "Your account has been suspended.",
+      });
+    }
+
+    // Existing Seller suspension checks.
     if (
       user.sellerStatus === "suspended" ||
       user.verificationStatus === "suspended"
@@ -86,7 +99,10 @@ const protect = async (req, res, next) => {
   }
 };
 
-// Allow only administrators
+// ======================================================
+// ADMIN MIDDLEWARE
+// ======================================================
+
 const adminOnly = (req, res, next) => {
   if (!req.user || req.user.role !== "admin") {
     return res.status(403).json({
@@ -97,7 +113,10 @@ const adminOnly = (req, res, next) => {
   next();
 };
 
-// Allow only approved sellers
+// ======================================================
+// SELLER MIDDLEWARE
+// ======================================================
+
 const sellerOnly = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({

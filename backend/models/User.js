@@ -1,65 +1,100 @@
-
 const mongoose = require("mongoose");
 
 // ======================================================
-// REUSABLE SUB-SCHEMAS
+// CUSTOMER SUB-SCHEMAS
 // ======================================================
 
-const addressSchema = new mongoose.Schema(
+const customerAddressSchema = new mongoose.Schema(
   {
-    street: { type: String, trim: true, default: "" },
-    area: { type: String, trim: true, default: "" },
-    city: { type: String, trim: true, default: "" },
+    label: {
+      type: String,
+      enum: ["Home", "Office", "Campus / Hostel", "Other"],
+      default: "Home",
+    },
+    recipientName: { type: String, trim: true, maxlength: 80, default: "" },
+    recipientPhone: { type: String, trim: true, maxlength: 20, default: "" },
+    division: { type: String, trim: true, default: "" },
     district: { type: String, trim: true, default: "" },
+    area: { type: String, trim: true, default: "" },
+    streetAddress: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+      default: "",
+    },
     postalCode: { type: String, trim: true, default: "" },
-    country: { type: String, trim: true, default: "Bangladesh" },
+    isDefaultShipping: { type: Boolean, default: false },
+    isDefaultBilling: { type: Boolean, default: false },
+  },
+  { timestamps: false }
+);
+
+const customerWishlistSchema = new mongoose.Schema(
+  {
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      required: true,
+    },
+    variantSku: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    addedAt: { type: Date, default: Date.now },
   },
   { _id: false }
 );
 
-// Customer-only subdocuments. Kept separate from seller schemas.
-const customerAddressSchema = new mongoose.Schema({
-  label: { type: String, enum: ["Home", "Office", "Campus / Hostel", "Other"], default: "Home" },
-  recipientName: { type: String, trim: true, maxlength: 80, default: "" },
-  recipientPhone: { type: String, trim: true, maxlength: 20, default: "" },
-  division: { type: String, trim: true, default: "" },
-  district: { type: String, trim: true, default: "" },
-  area: { type: String, trim: true, default: "" },
-  streetAddress: { type: String, trim: true, maxlength: 200, default: "" },
-  postalCode: { type: String, trim: true, default: "" },
-  isDefaultShipping: { type: Boolean, default: false },
-  isDefaultBilling: { type: Boolean, default: false },
-}, { _id: true });
+const customerPriceAlertSchema = new mongoose.Schema(
+  {
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      required: true,
+    },
+    variantSku: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    targetPrice: { type: Number, min: 0, required: true },
+    notifyOnRestock: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
 
-const customerWishlistSchema = new mongoose.Schema({
-  productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
-  variantSku: { type: String, trim: true, uppercase: true, default: "" },
-  addedAt: { type: Date, default: Date.now },
-}, { _id: false });
+const ownedDeviceSchema = new mongoose.Schema(
+  {
+    brand: { type: String, trim: true, maxlength: 80, default: "" },
+    model: { type: String, trim: true, maxlength: 100, default: "" },
+    category: { type: String, trim: true, maxlength: 80, default: "" },
+  },
+  { _id: false }
+);
 
-const customerPriceAlertSchema = new mongoose.Schema({
-  productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
-  variantSku: { type: String, trim: true, uppercase: true, default: "" },
-  targetPrice: { type: Number, min: 0, required: true },
-  notifyOnRestock: { type: Boolean, default: true },
-}, { _id: false });
+const customerPreferencesSchema = new mongoose.Schema(
+  {
+    orderUpdatesSms: { type: Boolean, default: true },
+    priceDropEmails: { type: Boolean, default: true },
+    warrantyExpiryReminders: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
 
-const ownedDeviceSchema = new mongoose.Schema({
-  brand: { type: String, trim: true, maxlength: 80, default: "" },
-  model: { type: String, trim: true, maxlength: 100, default: "" },
-  category: { type: String, trim: true, maxlength: 80, default: "" },
-}, { _id: false });
+const customerBillingProfileSchema = new mongoose.Schema(
+  {
+    companyName: { type: String, trim: true, maxlength: 120, default: "" },
+    binNumber: { type: String, trim: true, maxlength: 30, default: "" },
+  },
+  { _id: false }
+);
 
-const customerPreferencesSchema = new mongoose.Schema({
-  orderUpdatesSms: { type: Boolean, default: true },
-  priceDropEmails: { type: Boolean, default: true },
-  warrantyExpiryReminders: { type: Boolean, default: true },
-}, { _id: false });
-
-const customerBillingProfileSchema = new mongoose.Schema({
-  companyName: { type: String, trim: true, maxlength: 120, default: "" },
-  binNumber: { type: String, trim: true, maxlength: 30, default: "" },
-}, { _id: false });
+// ======================================================
+// EXISTING SELLER SUB-SCHEMAS
+// ======================================================
 
 const supportHoursSchema = new mongoose.Schema(
   {
@@ -99,10 +134,7 @@ const sellerDefaultsSchema = new mongoose.Schema(
       default: "",
       maxlength: 2000,
     },
-    vacationMode: {
-      type: Boolean,
-      default: false,
-    },
+    vacationMode: { type: Boolean, default: false },
     vacationMessage: {
       type: String,
       trim: true,
@@ -124,8 +156,6 @@ const sellerMetricsSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// Private KYC information.
-// These fields are excluded from normal queries by default.
 const sellerKycSchema = new mongoose.Schema(
   {
     ownerName: {
@@ -208,8 +238,6 @@ const sellerKycSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// Private payout information.
-// select:false is query protection, not encryption at rest.
 const sellerPayoutSchema = new mongoose.Schema(
   {
     method: {
@@ -218,24 +246,9 @@ const sellerPayoutSchema = new mongoose.Schema(
       default: "",
       select: false,
     },
-    bankName: {
-      type: String,
-      trim: true,
-      default: "",
-      select: false,
-    },
-    branchName: {
-      type: String,
-      trim: true,
-      default: "",
-      select: false,
-    },
-    routingNumber: {
-      type: String,
-      trim: true,
-      default: "",
-      select: false,
-    },
+    bankName: { type: String, trim: true, default: "", select: false },
+    branchName: { type: String, trim: true, default: "", select: false },
+    routingNumber: { type: String, trim: true, default: "", select: false },
     accountHolderName: {
       type: String,
       trim: true,
@@ -260,25 +273,19 @@ const sellerPayoutSchema = new mongoose.Schema(
       default: "",
       select: false,
     },
-    mfsNumber: {
-      type: String,
-      trim: true,
-      default: "",
-      select: false,
-    },
+    mfsNumber: { type: String, trim: true, default: "", select: false },
   },
   { _id: false }
 );
 
 // ======================================================
-// USER SCHEMA
+// MAIN USER SCHEMA
 // ======================================================
 
 const userSchema = new mongoose.Schema(
   {
-    // --------------------------------------------------
-    // ACCOUNT INFORMATION
-    // --------------------------------------------------
+    // Existing authentication fields.
+    // Keep these names for compatibility with existing auth code.
 
     name: {
       type: String,
@@ -318,15 +325,8 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
-    otp: {
-      type: String,
-      select: false,
-    },
-
-    otpExpires: {
-      type: Date,
-      select: false,
-    },
+    otp: { type: String, select: false },
+    otpExpires: { type: Date, select: false },
 
     address: {
       type: String,
@@ -335,9 +335,9 @@ const userSchema = new mongoose.Schema(
       maxlength: 500,
     },
 
-    // --------------------------------------------------
-    // CUSTOMER ACCOUNT AND SHOPPING PROFILE
-    // --------------------------------------------------
+    // ==================================================
+    // CUSTOMER ACCOUNT INFORMATION
+    // ==================================================
 
     phone: {
       type: String,
@@ -376,6 +376,10 @@ const userSchema = new mongoose.Schema(
       maxlength: 2048,
     },
 
+    // ==================================================
+    // CUSTOMER ADDRESSES
+    // ==================================================
+
     addresses: {
       type: [customerAddressSchema],
       default: [],
@@ -385,18 +389,42 @@ const userSchema = new mongoose.Schema(
       },
     },
 
-    wishlist: { type: [customerWishlistSchema], default: [] },
-    priceAlerts: { type: [customerPriceAlertSchema], default: [] },
-    ownedDevices: { type: [ownedDeviceSchema], default: [] },
+    // ==================================================
+    // CUSTOMER SHOPPING FEATURES
+    // ==================================================
+
+    wishlist: {
+      type: [customerWishlistSchema],
+      default: [],
+    },
+
+    priceAlerts: {
+      type: [customerPriceAlertSchema],
+      default: [],
+    },
+
+    ownedDevices: {
+      type: [ownedDeviceSchema],
+      default: [],
+    },
 
     recentlyViewed: {
-      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product",
+        },
+      ],
       default: [],
       validate: {
         validator: (items) => items.length <= 12,
         message: "Recently viewed can contain at most 12 products.",
       },
     },
+
+    // ==================================================
+    // CUSTOMER BILLING AND PREFERENCES
+    // ==================================================
 
     billingProfile: {
       type: customerBillingProfileSchema,
@@ -408,7 +436,7 @@ const userSchema = new mongoose.Schema(
       default: () => ({}),
     },
 
-    // Buyer performance data is kept separate from seller metrics.
+    // Do not merge this with Seller metrics.
     customerMetrics: {
       deliveredOrders: { type: Number, default: 0, min: 0 },
       refusedCodOrders: { type: Number, default: 0, min: 0 },
@@ -420,9 +448,9 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    // --------------------------------------------------
-    // SELLER ACCOUNT STATUS
-    // --------------------------------------------------
+    // ==================================================
+    // EXISTING SELLER ACCOUNT STATUS
+    // ==================================================
 
     sellerStatus: {
       type: String,
@@ -458,15 +486,14 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
 
-    // --------------------------------------------------
-    // PUBLIC SELLER STOREFRONT
-    // --------------------------------------------------
+    // ==================================================
+    // EXISTING SELLER STOREFRONT
+    // ==================================================
 
     storeName: {
       type: String,
       trim: true,
       default: "",
-      minlength: 3,
       maxlength: 50,
     },
 
@@ -479,17 +506,8 @@ const userSchema = new mongoose.Schema(
       match: /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
     },
 
-    logoUrl: {
-      type: String,
-      trim: true,
-      default: "",
-    },
-
-    bannerUrl: {
-      type: String,
-      trim: true,
-      default: "",
-    },
+    logoUrl: { type: String, trim: true, default: "" },
+    bannerUrl: { type: String, trim: true, default: "" },
 
     tagline: {
       type: String,
@@ -505,7 +523,6 @@ const userSchema = new mongoose.Schema(
       maxlength: 1000,
     },
 
-    // Retained for compatibility with the previous frontend.
     storeDescription: {
       type: String,
       trim: true,
@@ -568,32 +585,19 @@ const userSchema = new mongoose.Schema(
       maxlength: 254,
     },
 
-    // Legacy seller contact fields.
-    storePhone: {
-      type: String,
-      trim: true,
-      default: "",
-    },
+    // Legacy Seller contact fields.
+    storePhone: { type: String, trim: true, default: "" },
+    storeAddress: { type: String, trim: true, default: "" },
 
-    storeAddress: {
-      type: String,
-      trim: true,
-      default: "",
-    },
-
-    // --------------------------------------------------
-    // PRIVATE SELLER KYC
-    // --------------------------------------------------
+    // ==================================================
+    // EXISTING SELLER PRIVATE KYC AND PAYOUT
+    // ==================================================
 
     kyc: {
       type: sellerKycSchema,
       default: () => ({}),
       select: false,
     },
-
-    // --------------------------------------------------
-    // PRIVATE SELLER PAYOUT
-    // --------------------------------------------------
 
     payout: {
       type: sellerPayoutSchema,
@@ -609,27 +613,23 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
 
-    // --------------------------------------------------
-    // SELLER STORE DEFAULTS
-    // --------------------------------------------------
+    // ==================================================
+    // EXISTING SELLER DEFAULTS AND METRICS
+    // ==================================================
 
     defaults: {
       type: sellerDefaultsSchema,
       default: () => ({}),
     },
 
-    // --------------------------------------------------
-    // SYSTEM-COMPUTED SELLER METRICS
-    // --------------------------------------------------
-
     metrics: {
       type: sellerMetricsSchema,
       default: () => ({}),
     },
 
-    // --------------------------------------------------
-    // SELLER APPLICATION (LEGACY COMPATIBILITY)
-    // --------------------------------------------------
+    // ==================================================
+    // EXISTING SELLER APPLICATION
+    // ==================================================
 
     sellerApplication: {
       reason: {
@@ -667,16 +667,73 @@ const userSchema = new mongoose.Schema(
 );
 
 // ======================================================
-// VALIDATION
+// COMPATIBILITY VIRTUALS
 // ======================================================
 
-userSchema.pre("validate", function (next) {
-  // Normalize email.
+// The existing application uses name/isVerified.
+// These aliases expose the requested customer terminology.
+userSchema.virtual("fullName")
+  .get(function () {
+    return this.name;
+  })
+  .set(function (value) {
+    this.name = value;
+  });
+
+userSchema.virtual("isEmailVerified")
+  .get(function () {
+    return this.isVerified;
+  })
+  .set(function (value) {
+    this.isVerified = value;
+  });
+
+// ======================================================
+// VALIDATION AND SELLER FIELD SYNCHRONIZATION
+// ======================================================
+
+userSchema.pre("validate", function () {
   if (this.email) {
     this.email = this.email.trim().toLowerCase();
   }
 
-  // Synchronize legacy seller fields.
+  // Customer address validation.
+  if (Array.isArray(this.addresses)) {
+    if (this.addresses.length > 5) {
+      this.invalidate(
+        "addresses",
+        "A maximum of 5 saved addresses is allowed."
+      );
+    }
+
+    const defaultShippingCount = this.addresses.filter(
+      (item) => item.isDefaultShipping
+    ).length;
+
+    const defaultBillingCount = this.addresses.filter(
+      (item) => item.isDefaultBilling
+    ).length;
+
+    if (defaultShippingCount > 1) {
+      this.invalidate(
+        "addresses",
+        "Only one default shipping address is allowed."
+      );
+    }
+
+    if (defaultBillingCount > 1) {
+      this.invalidate(
+        "addresses",
+        "Only one default billing address is allowed."
+      );
+    }
+  }
+
+  if (this.recentlyViewed?.length > 12) {
+    this.recentlyViewed = this.recentlyViewed.slice(-12);
+  }
+
+  // Preserve existing Seller compatibility behavior.
   if (!this.storeDescription && this.about) {
     this.storeDescription = this.about;
   }
@@ -704,36 +761,15 @@ userSchema.pre("validate", function (next) {
     this.storeAddress = addressParts.join(", ");
   }
 
-  // Generate a store slug only when one does not already exist.
-  // Existing slugs are preserved.
   if (this.isNew && this.storeName && !this.storeSlug) {
-    const baseSlug = this.storeName
+    this.storeSlug = this.storeName
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
-
-    this.storeSlug = baseSlug;
   }
 
-  // Customer-specific address and history limits.
-  if (Array.isArray(this.addresses)) {
-    if (this.addresses.length > 5) {
-      this.invalidate("addresses", "A maximum of 5 saved addresses is allowed.");
-    }
-    if (this.addresses.filter((item) => item.isDefaultShipping).length > 1) {
-      this.invalidate("addresses", "Only one default shipping address is allowed.");
-    }
-    if (this.addresses.filter((item) => item.isDefaultBilling).length > 1) {
-      this.invalidate("addresses", "Only one default billing address is allowed.");
-    }
-  }
-
-  if (this.recentlyViewed?.length > 12) {
-    this.recentlyViewed = this.recentlyViewed.slice(-12);
-  }
-
-  // Seller-specific validation.
+  // Existing Seller validations.
   if (this.role === "seller" && this.storeName) {
     if (this.storeName.length < 3 || this.storeName.length > 50) {
       this.invalidate(
@@ -754,10 +790,7 @@ userSchema.pre("validate", function (next) {
     }
   }
 
-  if (
-    this.specialties &&
-    this.specialties.length > 5
-  ) {
+  if (this.specialties && this.specialties.length > 5) {
     this.invalidate(
       "specialties",
       "A maximum of 5 specialties is allowed."
@@ -770,11 +803,7 @@ userSchema.pre("validate", function (next) {
   ) {
     const address = this.publicAddress || {};
 
-    if (
-      !address.city &&
-      !address.district &&
-      !address.street
-    ) {
+    if (!address.city && !address.district && !address.street) {
       this.invalidate(
         "publicAddress",
         "A public business address is required for this seller type."
@@ -782,12 +811,10 @@ userSchema.pre("validate", function (next) {
     }
   }
 
-  // Validate Bangladeshi NID formats or passport number.
   if (this.isModified("kyc.nidNumber") && this.kyc?.nidNumber) {
     const nid = this.kyc.nidNumber.trim();
 
     const validNid = /^(\d{10}|\d{13}|\d{17})$/.test(nid);
-
     const validPassport = /^[A-Za-z0-9]{6,20}$/.test(nid);
 
     if (!validNid && !validPassport) {
@@ -798,18 +825,7 @@ userSchema.pre("validate", function (next) {
     }
   }
 
-  next();
 });
-
-// Compatibility aliases for the customer-field specification.
-// Existing code continues to use name/isVerified without a breaking migration.
-userSchema.virtual("fullName")
-  .get(function () { return this.name; })
-  .set(function (value) { this.name = value; });
-
-userSchema.virtual("isEmailVerified")
-  .get(function () { return this.isVerified; })
-  .set(function (value) { this.isVerified = value; });
 
 // ======================================================
 // INDEXES
@@ -826,7 +842,7 @@ userSchema.index({
 });
 
 // ======================================================
-// MODEL EXPORT
+// EXPORT
 // ======================================================
 
 module.exports =

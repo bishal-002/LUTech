@@ -61,6 +61,24 @@ const changeOrderStatus = async (order, status) => {
   }
 
   await order.save();
+
+  // Update customer metrics when an order is delivered.
+  if (status === "delivered") {
+    try {
+      await User.updateOne(
+        { _id: order.customerId },
+        {
+          $inc: {
+            "customerMetrics.deliveredOrders": 1,
+            "customerMetrics.totalSpent": order.totalAmount,
+          },
+        }
+      );
+    } catch (error) {
+      console.error("Customer metrics update failed:", error);
+    }
+  }
+
   return true;
 };
 
@@ -112,15 +130,43 @@ const createCustomerOrder = async (req, res) => {
     });
   }
 
-  const { shippingName, shippingPhone, shippingAddress } = req.body;
+  // Use the saved default address and customer contact details as fallbacks.
+  const customerProfile = await User.findById(req.user._id)
+    .select("name phone address addresses");
 
-  if (
-    !shippingName?.trim() ||
-    !shippingPhone?.trim() ||
-    !shippingAddress?.trim()
-  ) {
+  if (!customerProfile) {
+    return res.status(404).json({ message: "Customer account not found." });
+  }
+
+  const savedShippingAddress =
+    customerProfile.addresses?.find((item) => item.isDefaultShipping) ||
+    customerProfile.addresses?.[0];
+
+  const shippingName = String(
+    req.body.shippingName || savedShippingAddress?.recipientName || customerProfile.name || ""
+  ).trim();
+
+  const shippingPhone = String(
+    req.body.shippingPhone || savedShippingAddress?.recipientPhone || customerProfile.phone || ""
+  ).trim();
+
+  const savedAddressText = savedShippingAddress
+    ? [
+      savedShippingAddress.streetAddress,
+      savedShippingAddress.area,
+      savedShippingAddress.district,
+      savedShippingAddress.division,
+      savedShippingAddress.postalCode,
+    ].filter(Boolean).join(", ")
+    : "";
+
+  const shippingAddress = String(
+    req.body.shippingAddress || savedAddressText || customerProfile.address || ""
+  ).trim();
+
+  if (!shippingName || !shippingPhone || !shippingAddress) {
     return res.status(400).json({
-      message: "Please provide your name, phone number and shipping address.",
+      message: "Add a mobile number and delivery address to your account, or provide them at checkout.",
     });
   }
 

@@ -1,8 +1,15 @@
-
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import axios from "axios";
 
 import { getProductById } from "../../services/productService";
+
+import {
+  addToWishlist,
+  addRecentlyViewed,
+  addPriceAlert,
+} from "../../services/userService";
+
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import Loader from "../../components/Loader";
@@ -12,9 +19,21 @@ function ProductDetails() {
 
   const [product, setProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
+  const [selectedVariantId, setSelectedVariantId] = useState("");
+
   const [loading, setLoading] = useState(true);
+  const [cartLoading, setCartLoading] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [alertLoading, setAlertLoading] = useState(false);
+
+  const [targetPrice, setTargetPrice] = useState("");
+
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  // ======================================================
+  // FETCH PRODUCT
+  // ======================================================
 
   const fetchProduct = useCallback(async () => {
     setLoading(true);
@@ -24,7 +43,16 @@ function ProductDetails() {
 
     try {
       const data = await getProductById(id);
-      setProduct(data.product || data);
+      const fetchedProduct = data.product || data;
+      setProduct(fetchedProduct);
+
+      const fetchedVariants = Array.isArray(fetchedProduct.variants)
+        ? fetchedProduct.variants
+        : [];
+      const defaultVariant =
+        fetchedVariants.find((variant) => variant.isDefault) ||
+        fetchedVariants[0];
+      setSelectedVariantId(defaultVariant?._id || "");
     } catch (err) {
       setError(
         err.response?.data?.message ||
@@ -39,58 +67,245 @@ function ProductDetails() {
     fetchProduct();
   }, [fetchProduct]);
 
-  const handleAddToCart = () => {
+  // ======================================================
+  // TRACK RECENTLY VIEWED
+  // ======================================================
+
+  useEffect(() => {
+    if (!product?._id) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("userInfo");
+
+      const currentUser = storedUser
+        ? JSON.parse(storedUser)
+        : null;
+
+      if (
+        token &&
+        currentUser?.role === "customer"
+      ) {
+        addRecentlyViewed(product._id).catch((err) => {
+          console.warn(
+            "Recently viewed update failed:",
+            err
+          );
+        });
+      }
+    } catch (err) {
+      console.warn("Unable to read customer session:", err);
+    }
+  }, [product?._id]);
+
+  // ======================================================
+  // ADD TO CART (BACKEND / MONGODB)
+  // ======================================================
+
+  const handleAddToCart = async () => {
     if (!product?._id) {
       setError("Product information is unavailable.");
       return;
     }
 
-    try {
-      const storedCart = localStorage.getItem("cart");
-      const cart = storedCart ? JSON.parse(storedCart) : [];
+    const token = localStorage.getItem("token");
 
-      if (!Array.isArray(cart)) {
-        setError("Your saved cart is invalid. Please clear it and try again.");
+    let currentUser = null;
+    try {
+      const storedUser = localStorage.getItem("userInfo");
+      currentUser = storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      currentUser = null;
+    }
+
+    if (!token || currentUser?.role !== "customer") {
+      setError("Please sign in with a customer account to add products to your cart.");
+      return;
+    }
+
+    const variants = Array.isArray(product.variants)
+      ? product.variants
+      : [];
+    const selectedVariant =
+      variants.find((variant) => String(variant._id) === String(selectedVariantId)) ||
+      variants.find((variant) => variant.isDefault) ||
+      variants[0];
+
+    if (!selectedVariant?._id) {
+      setError("This product does not have an available variant.");
+      return;
+    }
+
+    const availableStock = Number(selectedVariant.stockQuantity ?? 0);
+    const maxOrderQuantity = Number(selectedVariant.maxOrderQuantity || 99);
+    const allowedQuantity = Math.min(availableStock, maxOrderQuantity, 99);
+
+    if (availableStock < 1) {
+      setError("This product is currently out of stock.");
+      return;
+    }
+
+    if (quantity > allowedQuantity) {
+      setError(`Only ${allowedQuantity} item(s) can be added for this variant.`);
+      return;
+    }
+
+    try {
+      setCartLoading(true);
+      setError("");
+      setMessage("");
+
+      await axios.post(
+        "http://localhost:5000/api/cart",
+        {
+          productId: product._id,
+          variantId: selectedVariant._id,
+          quantity,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      setMessage(`${product.name || product.title || "Product"} added to your cart.`);
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Unable to add this product to your cart. Please try again."
+      );
+    } finally {
+      setCartLoading(false);
+    }
+  };
+
+  // ======================================================
+  // ADD TO WISHLIST
+  // ======================================================
+
+  const handleAddToWishlist = async () => {
+    if (!product?._id) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("userInfo");
+
+      const currentUser = storedUser
+        ? JSON.parse(storedUser)
+        : null;
+
+      if (!token || currentUser?.role !== "customer") {
+        setError(
+          "Please sign in with a customer account to use your wishlist."
+        );
         return;
       }
 
-      const existingItem = cart.find(
-        (item) => item.productId === product._id
-      );
-
-      let updatedCart;
-
-      if (existingItem) {
-        updatedCart = cart.map((item) =>
-          item.productId === product._id
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        );
-      } else {
-        updatedCart = [
-          ...cart,
-          {
-            productId: product._id,
-            name: product.name,
-            price: product.price,
-            image: product.image || "",
-            quantity,
-          },
-        ];
-      }
-
-      localStorage.setItem("cart", JSON.stringify(updatedCart));
+      setWishlistLoading(true);
       setError("");
-      setMessage(`${product.name} added to your cart.`);
-    } catch {
-      setError("Unable to update your cart. Please try again.");
+      setMessage("");
+
+      await addToWishlist(product._id);
+
+      setMessage("Product added to your wishlist.");
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Unable to add this product to your wishlist."
+      );
+    } finally {
+      setWishlistLoading(false);
     }
   };
+
+  // ======================================================
+  // CREATE PRICE ALERT
+  // ======================================================
+
+  const handleCreatePriceAlert = async (event) => {
+    event.preventDefault();
+
+    if (!product?._id) return;
+
+    const price = Number(targetPrice);
+
+    if (
+      !targetPrice ||
+      !Number.isFinite(price) ||
+      price < 0
+    ) {
+      setError("Enter a valid target price.");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("userInfo");
+
+      const currentUser = storedUser
+        ? JSON.parse(storedUser)
+        : null;
+
+      if (!token || currentUser?.role !== "customer") {
+        setError(
+          "Please sign in with a customer account to set a price alert."
+        );
+        return;
+      }
+
+      setAlertLoading(true);
+      setError("");
+      setMessage("");
+
+      await addPriceAlert({
+        productId: product._id,
+        targetPrice: price,
+        notifyOnRestock: true,
+      });
+
+      setTargetPrice("");
+      setMessage("Price alert saved successfully.");
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Unable to save price alert."
+      );
+    } finally {
+      setAlertLoading(false);
+    }
+  };
+
+  const productVariants = Array.isArray(product?.variants)
+    ? product.variants
+    : [];
+
+  const selectedVariant =
+    productVariants.find(
+      (variant) => String(variant._id) === String(selectedVariantId)
+    ) ||
+    productVariants.find((variant) => variant.isDefault) ||
+    productVariants[0] ||
+    null;
+
+  const currentPrice = selectedVariant
+    ? selectedVariant.salePrice ?? selectedVariant.regularPrice
+    : product?.price ?? 0;
+
+  const availableStock = Number(selectedVariant?.stockQuantity ?? 0);
+  const maxAllowedQuantity = selectedVariant
+    ? Math.min(availableStock, Number(selectedVariant.maxOrderQuantity || 99), 99)
+    : 99;
 
   const formatPrice = (price) =>
     `৳ ${Number(price || 0).toLocaleString("en-BD", {
       maximumFractionDigits: 2,
     })}`;
+
+  // ======================================================
+  // RENDER
+  // ======================================================
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F4F6F4]">
@@ -104,13 +319,20 @@ function ProductDetails() {
           <Link to="/" className="transition hover:text-[#B9533B]">
             Home
           </Link>
+
           <span>/</span>
-          <Link to="/products" className="transition hover:text-[#B9533B]">
+
+          <Link
+            to="/products"
+            className="transition hover:text-[#B9533B]"
+          >
             Products
           </Link>
+
           <span>/</span>
+
           <span className="max-w-[220px] truncate font-medium text-[#20332B]">
-            {product?.name || "Product Details"}
+            {product?.name || product?.title || "Product Details"}
           </span>
         </nav>
 
@@ -120,11 +342,7 @@ function ProductDetails() {
           </div>
         ) : error && !product ? (
           <div className="rounded-xl border border-[#E5E9E5] bg-white px-5 py-14 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-xl font-bold text-red-600">
-              !
-            </div>
-
-            <h1 className="mt-4 text-xl font-bold text-[#20332B]">
+            <h1 className="text-xl font-bold text-[#20332B]">
               Product unavailable
             </h1>
 
@@ -135,7 +353,7 @@ function ProductDetails() {
             <button
               type="button"
               onClick={fetchProduct}
-              className="mt-5 rounded-lg bg-[#1A2E26] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#294438]"
+              className="mt-5 rounded-lg bg-[#1A2E26] px-5 py-2.5 text-sm font-semibold text-white"
             >
               Try Again
             </button>
@@ -143,7 +361,7 @@ function ProductDetails() {
             <div>
               <Link
                 to="/products"
-                className="mt-4 inline-block text-sm font-semibold text-[#B9533B] hover:text-[#1A2E26]"
+                className="mt-4 inline-block text-sm font-semibold text-[#B9533B]"
               >
                 Back to Products
               </Link>
@@ -157,7 +375,7 @@ function ProductDetails() {
 
             <Link
               to="/products"
-              className="mt-5 inline-flex rounded-lg bg-[#1A2E26] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#294438]"
+              className="mt-5 inline-flex rounded-lg bg-[#1A2E26] px-5 py-2.5 text-sm font-semibold text-white"
             >
               Browse Products
             </Link>
@@ -165,29 +383,19 @@ function ProductDetails() {
         ) : (
           <>
             <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2 lg:gap-10 xl:gap-14">
+              {/* Product image */}
+
               <section>
                 <div className="flex aspect-square max-h-[560px] items-center justify-center overflow-hidden rounded-xl border border-[#E5E9E5] bg-white p-5 sm:p-8">
                   {product.image ? (
                     <img
                       src={product.image}
-                      alt={product.name || "Product"}
+                      alt={product.name || product.title || "Product"}
                       className="h-full w-full object-contain"
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-[#89958D]">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        className="h-16 w-16"
-                        aria-hidden="true"
-                      >
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <path d="m21 15-5-5L5 21" />
-                      </svg>
+                      <span className="text-5xl">▧</span>
 
                       <p className="mt-3 text-sm">
                         No product image available
@@ -197,13 +405,15 @@ function ProductDetails() {
                 </div>
               </section>
 
+              {/* Product information */}
+
               <section className="flex h-full flex-col">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#B9533B]">
                   LUTech Collection
                 </p>
 
                 <h1 className="mt-2 text-2xl font-extrabold leading-tight tracking-tight text-[#20332B] sm:text-3xl lg:text-4xl">
-                  {product.name || "Unnamed Product"}
+                  {product.name || product.title || "Unnamed Product"}
                 </h1>
 
                 <div className="mt-4">
@@ -212,7 +422,7 @@ function ProductDetails() {
                   </p>
 
                   <p className="mt-1 text-2xl font-extrabold tracking-tight text-[#1A2E26] sm:text-3xl">
-                    {formatPrice(product.price)}
+                    {formatPrice(currentPrice)}
                   </p>
                 </div>
 
@@ -229,7 +439,52 @@ function ProductDetails() {
                   </p>
                 </div>
 
+                {/* Purchase controls */}
+
                 <div className="mt-6 flex flex-1 flex-col rounded-xl border border-[#E5E9E5] bg-white p-4 sm:p-5">
+                  {productVariants.length > 1 && (
+                    <div className="mb-4">
+                      <label
+                        htmlFor="product-variant"
+                        className="mb-2 block text-sm font-semibold text-[#20332B]"
+                      >
+                        Choose an option
+                      </label>
+                      <select
+                        id="product-variant"
+                        value={selectedVariantId}
+                        onChange={(event) => {
+                          setSelectedVariantId(event.target.value);
+                          setQuantity(1);
+                          setError("");
+                          setMessage("");
+                        }}
+                        className="w-full rounded-lg border border-[#E5E9E5] bg-white px-3 py-2.5 text-sm text-[#20332B] outline-none focus:border-[#1A2E26]"
+                      >
+                        {productVariants.map((variant) => {
+                          const attributeText = variant.attributes
+                            ? Object.entries(variant.attributes)
+                                .map(([key, value]) => `${key}: ${value}`)
+                                .join(" / ")
+                            : "";
+                          return (
+                            <option key={variant._id} value={variant._id}>
+                              {attributeText || variant.sku || "Default option"}
+                              {Number(variant.stockQuantity) < 1 ? " — Out of stock" : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="mb-3 flex items-center justify-between text-xs text-[#68766F]">
+                    <span>Availability</span>
+                    <span className={availableStock > 0 ? "font-semibold text-[#287A50]" : "font-semibold text-red-600"}>
+                      {availableStock > 0 ? `${availableStock} in stock` : "Out of stock"}
+                    </span>
+                  </div>
+
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <label
                       htmlFor="product-quantity"
@@ -248,7 +503,7 @@ function ProductDetails() {
                         }
                         disabled={quantity <= 1}
                         aria-label="Decrease quantity"
-                        className="flex h-10 w-10 items-center justify-center text-lg text-[#20332B] transition hover:bg-[#EBF0EB] disabled:opacity-40"
+                        className="flex h-10 w-10 items-center justify-center text-lg text-[#20332B] hover:bg-[#EBF0EB] disabled:opacity-40"
                       >
                         −
                       </button>
@@ -257,7 +512,7 @@ function ProductDetails() {
                         id="product-quantity"
                         type="number"
                         min="1"
-                        max="99"
+                        max={maxAllowedQuantity}
                         value={quantity}
                         onChange={(e) => {
                           const value = Number(e.target.value);
@@ -265,7 +520,7 @@ function ProductDetails() {
                           if (
                             Number.isInteger(value) &&
                             value >= 1 &&
-                            value <= 99
+                            value <= maxAllowedQuantity
                           ) {
                             setQuantity(value);
                           }
@@ -277,12 +532,12 @@ function ProductDetails() {
                         type="button"
                         onClick={() =>
                           setQuantity((current) =>
-                            Math.min(99, current + 1)
+                            Math.min(maxAllowedQuantity, current + 1)
                           )
                         }
-                        disabled={quantity >= 99}
+                        disabled={quantity >= maxAllowedQuantity || maxAllowedQuantity < 1}
                         aria-label="Increase quantity"
-                        className="flex h-10 w-10 items-center justify-center text-lg text-[#20332B] transition hover:bg-[#EBF0EB] disabled:opacity-40"
+                        className="flex h-10 w-10 items-center justify-center text-lg text-[#20332B] hover:bg-[#EBF0EB] disabled:opacity-40"
                       >
                         +
                       </button>
@@ -296,7 +551,7 @@ function ProductDetails() {
 
                     <span className="text-lg font-bold text-[#1A2E26]">
                       {formatPrice(
-                        Number(product.price || 0) * quantity
+                        Number(currentPrice || 0) * quantity
                       )}
                     </span>
                   </div>
@@ -319,23 +574,21 @@ function ProductDetails() {
                   <button
                     type="button"
                     onClick={handleAddToCart}
-                    className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#1A2E26] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#294438] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B9533B]"
+                    disabled={cartLoading || !selectedVariant || availableStock < 1}
+                    className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#1A2E26] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#294438] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      className="h-5 w-5"
-                      aria-hidden="true"
-                    >
-                      <path d="M3 3h2l2.4 11.4a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H6" />
-                      <circle cx="10" cy="20" r="1" />
-                      <circle cx="18" cy="20" r="1" />
-                    </svg>
+                    {cartLoading ? "Adding..." : availableStock < 1 ? "Out of Stock" : "Add to Cart"}
+                  </button>
 
-                    Add to Cart
+                  <button
+                    type="button"
+                    onClick={handleAddToWishlist}
+                    disabled={wishlistLoading}
+                    className="mt-3 flex min-h-11 w-full items-center justify-center rounded-lg border border-[#D5DED7] px-5 py-2.5 text-sm font-semibold text-[#20332B] transition hover:bg-[#F4F6F4] disabled:opacity-60"
+                  >
+                    {wishlistLoading
+                      ? "Saving..."
+                      : "♡ Add to Wishlist"}
                   </button>
 
                   <Link
@@ -345,25 +598,53 @@ function ProductDetails() {
                     View Cart
                   </Link>
                 </div>
+
+                {/* Price alert */}
+
+                <form
+                  onSubmit={handleCreatePriceAlert}
+                  className="mt-4 rounded-xl border border-[#E5E9E5] bg-white p-4 sm:p-5"
+                >
+                  <h2 className="text-sm font-bold text-[#20332B]">
+                    Set a Price Alert
+                  </h2>
+
+                  <p className="mt-1 text-xs text-[#68766F]">
+                    Save your target price for this product.
+                  </p>
+
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={targetPrice}
+                      onChange={(e) => setTargetPrice(e.target.value)}
+                      placeholder="Your target price (৳)"
+                      className="min-w-0 flex-1 rounded-lg border border-[#E5E9E5] px-3 py-2.5 text-sm outline-none focus:border-[#1A2E26]"
+                    />
+
+                    <button
+                      type="submit"
+                      disabled={alertLoading}
+                      className="rounded-lg border border-[#C7D5CA] px-4 py-2.5 text-sm font-semibold text-[#20332B] hover:bg-[#EBF0EB] disabled:opacity-60"
+                    >
+                      {alertLoading ? "Saving..." : "Save Alert"}
+                    </button>
+                  </div>
+                </form>
               </section>
             </div>
 
             <div className="mt-6 flex flex-col gap-4 rounded-xl border border-[#E5E9E5] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#EBF0EB] text-lg text-[#1A2E26]">
-                  ✓
-                </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#20332B]">
+                  Shopping with LUTech
+                </h3>
 
-                <div>
-                  <h3 className="text-sm font-bold text-[#20332B]">
-                    Shopping with LUTech
-                  </h3>
-
-                  <p className="mt-1 text-xs text-[#68766F]">
-                    Explore electronics and accessories for your everyday
-                    needs.
-                  </p>
-                </div>
+                <p className="mt-1 text-xs text-[#68766F]">
+                  Explore electronics and accessories for your everyday needs.
+                </p>
               </div>
 
               <Link
