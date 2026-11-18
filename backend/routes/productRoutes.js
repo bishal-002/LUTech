@@ -18,10 +18,8 @@ const {
 const router = express.Router();
 
 /*
-|--------------------------------------------------------------------------
-| Authorization Middleware
-|--------------------------------------------------------------------------
-| Allows administrators or approved sellers to manage products.
+Authorization Middleware
+Allows administrators or approved sellers to manage products.
 */
 
 const adminOrApprovedSeller = (req, res, next) => {
@@ -33,31 +31,21 @@ const adminOrApprovedSeller = (req, res, next) => {
 };
 
 /*
-|--------------------------------------------------------------------------
-| Public Product Routes
-|--------------------------------------------------------------------------
+Public Product Routes
 */
 
 // Get all products
 router.get("/", getProducts);
 
+// Get products belonging to the authenticated seller
+router.get("/mine", protect, sellerOnly, getMyProducts);
+
 // Get a single product by ID
 router.get("/:id", getProductById);
 
 /*
-|--------------------------------------------------------------------------
-| Protected Seller Routes
-|--------------------------------------------------------------------------
-*/
-
-// Get products belonging to the authenticated seller
-router.get("/mine", protect, sellerOnly, getMyProducts);
-
-/*
-|--------------------------------------------------------------------------
-| Product Management Routes
-|--------------------------------------------------------------------------
-| Only administrators and approved sellers can manage products.
+Product Management Routes
+Only administrators and approved sellers can manage products.
 */
 
 // Create a product

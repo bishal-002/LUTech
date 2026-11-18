@@ -325,8 +325,41 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
-    otp: { type: String, select: false },
-    otpExpires: { type: Date, select: false },
+    otp: {
+      type: String,
+      select: false,
+    },
+
+    otpExpires: {
+      type: Date,
+      select: false,
+    },
+
+    otpAttempts: {
+      type: Number,
+      default: 0,
+      min: 0,
+      select: false,
+    },
+
+    otpLastSentAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    otpSendCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      select: false,
+    },
+
+    otpSendWindowStart: {
+      type: Date,
+      default: null,
+      select: false,
+    },
 
     address: {
       type: String,
@@ -666,9 +699,7 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// ======================================================
 // COMPATIBILITY VIRTUALS
-// ======================================================
 
 // The existing application uses name/isVerified.
 // These aliases expose the requested customer terminology.
@@ -688,9 +719,7 @@ userSchema.virtual("isEmailVerified")
     this.isVerified = value;
   });
 
-// ======================================================
 // VALIDATION AND SELLER FIELD SYNCHRONIZATION
-// ======================================================
 
 userSchema.pre("validate", function () {
   if (this.email) {
@@ -761,7 +790,11 @@ userSchema.pre("validate", function () {
     this.storeAddress = addressParts.join(", ");
   }
 
-  if (this.isNew && this.storeName && !this.storeSlug) {
+  // Generate or update store slug when a store is created or renamed.
+  if (
+    this.storeName &&
+    (this.isNew || this.isModified("storeName") || !this.storeSlug)
+  ) {
     this.storeSlug = this.storeName
       .toLowerCase()
       .trim()

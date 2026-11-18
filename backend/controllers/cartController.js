@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 const Cart = require("../models/Cart");
 const Product = require("../models/Product");
@@ -49,39 +48,60 @@ const addToCart = async (req, res) => {
       return res.status(404).json({ message: "Product variant not found." });
     }
 
-    if (variant.stockQuantity < quantity) {
-      return res.status(400).json({ message: "Insufficient stock." });
-    }
+    // Calculate the maximum quantity that can be added
+    const maxAllowedQuantity = Math.min(
+      variant.stockQuantity,
+      variant.maxOrderQuantity || 99
+    );
 
-    const maxQuantity = variant.maxOrderQuantity || 99;
+    // Find the existing cart item
+    const existingItem = await Cart.findOne({
+      userId: req.user._id,
+      productId,
+      variantId,
+    });
 
-    if (quantity > maxQuantity) {
+    // Calculate the final quantity before updating
+    const existingQuantity = existingItem ? existingItem.quantity : 0;
+    const newTotalQuantity = existingQuantity + quantity;
+
+    // Validate the combined quantity
+    if (newTotalQuantity > maxAllowedQuantity) {
       return res.status(400).json({
-        message: `Maximum order quantity is ${maxQuantity}.`,
+        message: `Available quantity is ${maxAllowedQuantity}. You already have ${existingQuantity} in your cart.`,
       });
     }
 
-    const item = await Cart.findOneAndUpdate(
-      {
+    let item;
+
+    if (existingItem) {
+      // Update only if the quantity has not changed since it was read
+      item = await Cart.findOneAndUpdate(
+        {
+          _id: existingItem._id,
+          quantity: existingQuantity,
+        },
+        {
+          $inc: { quantity },
+        },
+        {
+          new: true,
+          runValidators: true,
+        }
+      );
+
+      if (!item) {
+        return res.status(409).json({
+          message: "Cart item changed. Please try again.",
+        });
+      }
+    } else {
+      // Create a new cart item
+      item = await Cart.create({
         userId: req.user._id,
         productId,
         variantId,
-      },
-      {
-        $inc: { quantity },
-      },
-      {
-        new: true,
-        upsert: true,
-        runValidators: true,
-        setDefaultsOnInsert: true,
-      }
-    );
-
-    if (item.quantity > maxQuantity) {
-      await Cart.findByIdAndDelete(item._id);
-      return res.status(400).json({
-        message: `Maximum order quantity is ${maxQuantity}.`,
+        quantity,
       });
     }
 

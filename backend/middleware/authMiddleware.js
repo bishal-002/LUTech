@@ -137,12 +137,9 @@ const sellerOnly = (req, res, next) => {
     });
   }
 
-  if (
-    req.user.verificationStatus === "rejected" ||
-    req.user.verificationStatus === "suspended"
-  ) {
+  if (req.user.verificationStatus !== "approved") {
     return res.status(403).json({
-      message: "Your seller verification is not approved.",
+      message: "Your seller verification has not been approved.",
       verificationStatus: req.user.verificationStatus,
     });
   }

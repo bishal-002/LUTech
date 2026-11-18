@@ -1,11 +1,8 @@
-
 require("dotenv").config();
 
 const dns = require("dns");
 
-// Keep this resolver override only if your network still needs it
-// to resolve the MongoDB Atlas SRV record.
-dns.setServers(["8.8.8.8", "1.1.1.1"]);
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const express = require("express");
 const cors = require("cors");
@@ -15,6 +12,7 @@ const connectDB = require("./config/db");
 const userRoutes = require("./routes/userRoutes");
 const productRoutes = require("./routes/productRoutes");
 const cartRoutes = require("./routes/cartRoutes");
+const catalogRoutes = require("./routes/catalogRoutes");
 const testEmailRoute = require("./routes/testEmailRoute");
 const adminRoutes = require("./routes/adminRoutes");
 const sellerRoutes = require("./routes/sellerRoutes");
@@ -52,6 +50,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/cart", cartRoutes);
+app.use("/api/catalog", catalogRoutes);
 app.use("/api/test-email", testEmailRoute);
 app.use("/api/admin", adminRoutes);
 app.use("/api/seller", sellerRoutes);

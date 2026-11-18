@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
@@ -40,6 +39,10 @@ const getSellerOrderById = async (req, res) => {
   }
 };
 
+// ======================================================
+// CHANGE ORDER STATUS
+// ======================================================
+
 const changeOrderStatus = async (order, status) => {
   const transitions = {
     pending: ["confirmed", "cancelled"],
@@ -50,36 +53,184 @@ const changeOrderStatus = async (order, status) => {
     cancelled: [],
   };
 
-  if (!transitions[order.status]?.includes(status)) {
-    return false;
-  }
+  // --------------------------------------------------
+  // CANCELLATION: RESTORE INVENTORY TRANSACTIONALLY
+  // --------------------------------------------------
 
-  order.status = status;
+  if (status === "cancelled") {
+    const session = await mongoose.startSession();
 
-  if (status === "delivered" && order.paymentMethod === "COD") {
-    order.paymentStatus = "paid";
-  }
+    let transitionAllowed = false;
+    let cancelledOrder = null;
 
-  await order.save();
-
-  // Update customer metrics when an order is delivered.
-  if (status === "delivered") {
     try {
-      await User.updateOne(
-        { _id: order.customerId },
-        {
-          $inc: {
-            "customerMetrics.deliveredOrders": 1,
-            "customerMetrics.totalSpent": order.totalAmount,
-          },
+      await session.withTransaction(async () => {
+        // Reset these values in case the transaction retries.
+        transitionAllowed = false;
+        cancelledOrder = null;
+
+        // Always fetch the latest order status.
+        const currentOrder = await Order.findById(order._id).session(session);
+
+        if (
+          !currentOrder ||
+          !transitions[currentOrder.status]?.includes(status)
+        ) {
+          return;
         }
-      );
-    } catch (error) {
-      console.error("Customer metrics update failed:", error);
+
+        // Restore stock for every item in the order.
+        for (const item of currentOrder.items) {
+          const stockUpdate = await Product.updateOne(
+            {
+              _id: item.productId,
+              variants: {
+                $elemMatch: {
+                  _id: item.variantId,
+                },
+              },
+            },
+            {
+              $inc: {
+                "variants.$.stockQuantity": item.quantity,
+              },
+            },
+            { session }
+          );
+
+          // Abort the entire transaction if the product
+          // or its variant cannot be found.
+          if (stockUpdate.modifiedCount !== 1) {
+            const itemName =
+              item.snapshot?.title ||
+              item.name ||
+              "an order item";
+
+            throw new Error(
+              `Unable to restore inventory for ${itemName}. The order was not cancelled.`
+            );
+          }
+        }
+
+        // Change the order status only after inventory
+        // restoration has succeeded.
+        currentOrder.status = "cancelled";
+
+        await currentOrder.save({ session });
+
+        cancelledOrder = currentOrder;
+        transitionAllowed = true;
+      });
+
+      if (!transitionAllowed || !cancelledOrder) {
+        return false;
+      }
+
+      // Update the original order document used by the
+      // seller/admin response.
+      order.status = cancelledOrder.status;
+      order.paymentStatus = cancelledOrder.paymentStatus;
+      order.updatedAt = cancelledOrder.updatedAt;
+
+      return true;
+    } finally {
+      await session.endSession();
     }
   }
 
-  return true;
+  // --------------------------------------------------
+  // OTHER STATUS TRANSITIONS: UPDATE ORDER AND METRICS
+  // --------------------------------------------------
+
+  const session = await mongoose.startSession();
+
+  let transitionAllowed = false;
+  let updatedOrder = null;
+
+  try {
+    await session.withTransaction(async () => {
+      // Reset values in case MongoDB retries the transaction.
+      transitionAllowed = false;
+      updatedOrder = null;
+
+      // Fetch the latest order status inside the transaction.
+      const currentOrder = await Order.findById(order._id)
+        .session(session);
+
+      if (
+        !currentOrder ||
+        !transitions[currentOrder.status]?.includes(status)
+      ) {
+        return;
+      }
+
+      // Update order status.
+      currentOrder.status = status;
+
+      if (
+        status === "delivered" &&
+        currentOrder.paymentMethod === "COD"
+      ) {
+        currentOrder.paymentStatus = "paid";
+      }
+
+      await currentOrder.save({ session });
+
+      // Update customer and seller metrics only on delivery.
+      if (status === "delivered") {
+        // Update customer metrics.
+        const customerUpdate = await User.updateOne(
+          { _id: currentOrder.customerId },
+          {
+            $inc: {
+              "customerMetrics.deliveredOrders": 1,
+              "customerMetrics.totalSpent": currentOrder.totalAmount,
+            },
+          },
+          { session }
+        );
+
+        if (customerUpdate.matchedCount !== 1) {
+          throw new Error(
+            "Customer account not found. Customer metrics could not be updated."
+          );
+        }
+
+        // Update seller completed orders.
+        const sellerUpdate = await User.updateOne(
+          { _id: currentOrder.sellerId, role: "seller" },
+          {
+            $inc: {
+              "metrics.completedOrders": 1,
+            },
+          },
+          { session }
+        );
+
+        if (sellerUpdate.matchedCount !== 1) {
+          throw new Error(
+            "Seller account not found. Seller metrics could not be updated."
+          );
+        }
+      }
+
+      transitionAllowed = true;
+      updatedOrder = currentOrder;
+    });
+
+    if (!transitionAllowed || !updatedOrder) {
+      return false;
+    }
+
+    // Synchronize the original order object for the API response.
+    order.status = updatedOrder.status;
+    order.paymentStatus = updatedOrder.paymentStatus;
+    order.updatedAt = updatedOrder.updatedAt;
+
+    return true;
+  } finally {
+    await session.endSession();
+  }
 };
 
 const updateSellerOrderStatus = async (req, res) => {
@@ -185,7 +336,7 @@ const createCustomerOrder = async (req, res) => {
       const sellerGroups = new Map();
 
       for (const cartItem of cartItems) {
-        const product = await Product.findById(cartItem.productId).session(session);
+        const product = await Product.findById(cartItem.productId).populate("brandId", "name").session(session);
 
         if (!product) {
           throw new Error("A product in your cart is no longer available.");
@@ -215,6 +366,7 @@ const createCustomerOrder = async (req, res) => {
         const seller = await User.findOne({
           _id: sellerId,
           role: "seller",
+          status: "active",
           sellerStatus: "approved",
           verificationStatus: "approved",
           isVerified: true,

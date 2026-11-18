@@ -5,10 +5,9 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
+const crypto = require("crypto");
 
-// ======================================================
 // SAFE RESPONSE FIELDS
-// ======================================================
 
 const PUBLIC_SELLER_FIELDS = [
   "_id",
@@ -54,7 +53,13 @@ const isPlainObject = (value) =>
   !Array.isArray(value);
 
 const generateOTP = () =>
-  String(Math.floor(100000 + Math.random() * 900000));
+  crypto.randomInt(0, 1000000).toString().padStart(6, "0");
+
+const OTP_EXPIRY_MS = 5 * 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const OTP_SEND_WINDOW_MS = 60 * 60 * 1000;
+const OTP_MAX_SENDS_PER_WINDOW = 5;
 
 const createEmailTransporter = () =>
   nodemailer.createTransport({
@@ -130,7 +135,9 @@ const registerUser = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const otp = generateOTP();
-    const otpExpires = new Date(Date.now() + 5 * 60 * 1000);
+    const hashedOTP = await bcrypt.hash(otp, 10);
+    const now = new Date();
+    const otpExpires = new Date(now.getTime() + OTP_EXPIRY_MS);
 
     await User.create({
       name: name.trim(),
@@ -141,8 +148,12 @@ const registerUser = async (req, res) => {
         accountType === "seller" ? "pending" : "not_applicable",
       verificationStatus:
         accountType === "seller" ? "pending_review" : "pending_review",
-      otp,
+      otp: hashedOTP,
       otpExpires,
+      otpAttempts: 0,
+      otpLastSentAt: now,
+      otpSendCount: 1,
+      otpSendWindowStart: now,
       isVerified: false,
     });
 
@@ -186,9 +197,7 @@ const registerUser = async (req, res) => {
   }
 };
 
-// ======================================================
 // LOGIN USER
-// ======================================================
 
 const loginUser = async (req, res) => {
   try {
@@ -259,37 +268,14 @@ const loginUser = async (req, res) => {
       });
     }
 
-    user.lastLoginAt = new Date();
-    await User.updateOne(
-      { _id: user._id },
-      { $set: { lastLoginAt: user.lastLoginAt } }
-    );
-
-    // Reject inactive customer accounts.
-    if (user.status && user.status !== "active") {
-      return res.status(403).json({
-        message:
-          user.status === "deactivated"
-            ? "This account has been deactivated."
-            : "Your account has been suspended.",
-      });
-    }
+    // Record the user's last successful login.
+    const lastLoginAt = new Date();
 
     await User.updateOne(
       { _id: user._id },
       {
         $set: {
-          lastLoginAt: new Date(),
-        },
-      }
-    );
-
-    // Record last login.
-    await User.updateOne(
-      { _id: user._id },
-      {
-        $set: {
-          lastLoginAt: new Date(),
+          lastLoginAt,
         },
       }
     );
@@ -320,10 +306,7 @@ const loginUser = async (req, res) => {
   }
 };
 
-// ======================================================
 // VERIFY OTP
-// ======================================================
-
 const verifyOTP = async (req, res) => {
   try {
     const email = normalizeEmail(req.body.email);
@@ -340,7 +323,7 @@ const verifyOTP = async (req, res) => {
     }
 
     const user = await User.findOne({ email }).select(
-      "+otp +otpExpires"
+      "+otp +otpExpires +otpAttempts"
     );
 
     if (!user) {
@@ -355,21 +338,68 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    if (!user.otp || user.otp !== otp) {
+    if (!user.otp || !user.otpExpires) {
       return res.status(400).json({
-        message: "Invalid OTP.",
+        message: "No active OTP. Please request a new OTP.",
       });
     }
 
-    if (!user.otpExpires || user.otpExpires.getTime() < Date.now()) {
+    if (user.otpExpires.getTime() <= Date.now()) {
+      user.otp = undefined;
+      user.otpExpires = undefined;
+
+      await user.save();
+
       return res.status(400).json({
-        message: "OTP expired.",
+        message: "OTP expired. Please request a new OTP.",
       });
     }
 
+    if (user.otpAttempts >= OTP_MAX_ATTEMPTS) {
+      return res.status(429).json({
+        message: "Too many incorrect attempts. Request a new OTP.",
+      });
+    }
+
+    // Older accounts may still have a plain-text OTP.
+    // They must request a newly hashed OTP.
+    if (!/^\$2[aby]\$/.test(user.otp)) {
+      return res.status(400).json({
+        message: "Please request a new OTP.",
+      });
+    }
+
+    const otpMatches = await bcrypt.compare(otp, user.otp);
+
+    if (!otpMatches) {
+      user.otpAttempts += 1;
+
+      const attemptsRemaining =
+        OTP_MAX_ATTEMPTS - user.otpAttempts;
+
+      if (attemptsRemaining === 0) {
+        user.otp = undefined;
+        user.otpExpires = undefined;
+      }
+
+      await user.save();
+
+      if (attemptsRemaining === 0) {
+        return res.status(429).json({
+          message: "Too many incorrect attempts. Request a new OTP.",
+        });
+      }
+
+      return res.status(400).json({
+        message: `Invalid OTP. ${attemptsRemaining} attempts remaining.`,
+      });
+    }
+
+    // Successful verification
     user.isVerified = true;
     user.otp = undefined;
     user.otpExpires = undefined;
+    user.otpAttempts = 0;
 
     await user.save();
 
@@ -382,9 +412,104 @@ const verifyOTP = async (req, res) => {
   }
 };
 
-// ======================================================
+// RESEND OTP
+
+const resendOTP = async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({
+        message: "Please provide a valid email.",
+      });
+    }
+
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      return sendServerError(
+        res,
+        "Email service is not configured."
+      );
+    }
+
+    const genericMessage =
+      "If an unverified account exists, a new verification OTP will be sent.";
+
+    const user = await User.findOne({ email }).select(
+      "+otpLastSentAt +otpSendCount +otpSendWindowStart"
+    );
+
+    if (!user || user.isVerified) {
+      return res.status(200).json({
+        message: genericMessage,
+      });
+    }
+
+    const now = new Date();
+
+    let windowStart = user.otpSendWindowStart;
+    let sendCount = user.otpSendCount || 0;
+
+    // Reset the sending limit after one hour.
+    if (
+      !windowStart ||
+      now.getTime() - windowStart.getTime() >= OTP_SEND_WINDOW_MS
+    ) {
+      windowStart = now;
+      sendCount = 0;
+    }
+
+    // Enforce 60-second resend cooldown.
+    const cooldownActive =
+      user.otpLastSentAt &&
+      now.getTime() - user.otpLastSentAt.getTime() <
+      OTP_RESEND_COOLDOWN_MS;
+
+    // Maximum 5 OTP emails per hour.
+    if (cooldownActive || sendCount >= OTP_MAX_SENDS_PER_WINDOW) {
+      return res.status(200).json({
+        message: genericMessage,
+      });
+    }
+
+    const otp = generateOTP();
+    const hashedOTP = await bcrypt.hash(otp, 10);
+
+    user.otp = hashedOTP;
+    user.otpExpires = new Date(now.getTime() + OTP_EXPIRY_MS);
+    user.otpAttempts = 0;
+    user.otpLastSentAt = now;
+    user.otpSendCount = sendCount + 1;
+    user.otpSendWindowStart = windowStart;
+
+    await user.save();
+
+    try {
+      const transporter = createEmailTransporter();
+
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: "LUTech Email Verification",
+        text: `Your new OTP is ${otp}. It will expire in 5 minutes.`,
+      });
+    } catch (mailError) {
+      console.error("Resend OTP email failed:", mailError);
+
+      return res.status(503).json({
+        message: "Unable to send verification email. Please try again later.",
+      });
+    }
+
+    return res.status(200).json({
+      message: genericMessage,
+    });
+  } catch (error) {
+    console.error("Resend OTP error:", error);
+    return sendServerError(res);
+  }
+};
+
 // CUSTOMER PROFILE
-// ======================================================
 
 const isValidBdPhone = (phone) =>
   /^(?:\+8801|01)[3-9]\d{8}$/.test(phone);
@@ -679,25 +804,32 @@ const addRecentlyViewed = async (req, res) => {
   }
 };
 
-// ======================================================
 // DELETE USER PROFILE
-// ======================================================
-
 const deleteUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ message: "User not found." });
-    await user.deleteOne();
-    return res.status(200).json({ message: "Account deleted successfully." });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found.",
+      });
+    }
+
+    // Deactivate instead of permanently deleting the account.
+    user.status = "deactivated";
+
+    await user.save();
+
+    return res.status(200).json({
+      message: "Account deactivated successfully.",
+    });
   } catch (error) {
     console.error("Delete user profile error:", error);
     return sendServerError(res);
   }
 };
 
-// ======================================================
 // GET SELLER PROFILE
-// ======================================================
 
 const getSellerProfile = async (req, res) => {
   try {
@@ -1226,6 +1358,7 @@ module.exports = {
   removePriceAlert,
   addRecentlyViewed,
   verifyOTP,
+  resendOTP,
   getSellerProfile,
   updateSellerProfile,
   applyToBecomeSeller,

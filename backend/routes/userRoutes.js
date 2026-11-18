@@ -4,6 +4,7 @@ const {
   registerUser,
   loginUser,
   verifyOTP,
+  resendOTP,
   getUserProfile,
   updateUserProfile,
   deleteUserProfile,
@@ -17,17 +18,14 @@ const { protect } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// ======================================================
 // PUBLIC AUTHENTICATION ROUTES
-// ======================================================
 
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.post("/verify-otp", verifyOTP);
+router.post("/resend-otp", resendOTP);
 
-// ======================================================
 // PROTECTED ROUTES
-// ======================================================
 
 router.use(protect);
 
@@ -36,9 +34,7 @@ router.get("/profile/:id", getUserProfile);
 router.put("/profile/:id", updateUserProfile);
 router.delete("/profile/:id", deleteUserProfile);
 
-// ======================================================
 // CUSTOMER PROFILE ROUTES
-// ======================================================
 
 router.get(
   "/customer/profile",
@@ -50,9 +46,7 @@ router.put(
   customerController.updateCustomerProfile
 );
 
-// ======================================================
 // CUSTOMER SHOPPING ROUTES
-// ======================================================
 
 router.post(
   "/customer/wishlist",
@@ -79,9 +73,7 @@ router.post(
   customerController.addRecentlyViewed
 );
 
-// ======================================================
 // EXISTING SELLER APPLICATION ROUTES
-// ======================================================
 
 router.post(
   "/seller-application",

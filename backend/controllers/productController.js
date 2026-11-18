@@ -1,6 +1,8 @@
 
 const mongoose = require("mongoose");
 const Product = require("../models/Product");
+const Brand = require("../models/Brand");
+const Category = require("../models/Category");
 
 // ======================================================
 // CONFIGURATION
@@ -174,6 +176,31 @@ const createProduct = async (req, res) => {
     if (!productData.categoryId) {
       return res.status(400).json({
         message: "Category is required.",
+      });
+    }
+
+    // Verify that the selected brand and category exist and are active.
+    const [brand, category] = await Promise.all([
+      Brand.findOne({
+        _id: productData.brandId,
+        isActive: true,
+      }).select("_id"),
+
+      Category.findOne({
+        _id: productData.categoryId,
+        isActive: true,
+      }).select("_id"),
+    ]);
+
+    if (!brand) {
+      return res.status(400).json({
+        message: "Selected brand does not exist or is inactive.",
+      });
+    }
+
+    if (!category) {
+      return res.status(400).json({
+        message: "Selected category does not exist or is inactive.",
       });
     }
 
@@ -484,8 +511,37 @@ const updateProduct = async (req, res) => {
     }
 
     // Prevent accidental ownership changes.
+    // Prevent accidental ownership changes.
     delete updateData.sellerId;
     delete updateData.seller;
+
+    // Validate a changed brand reference.
+    if (updateData.brandId !== undefined) {
+      const brand = await Brand.findOne({
+        _id: updateData.brandId,
+        isActive: true,
+      }).select("_id");
+
+      if (!brand) {
+        return res.status(400).json({
+          message: "Selected brand does not exist or is inactive.",
+        });
+      }
+    }
+
+    // Validate a changed category reference.
+    if (updateData.categoryId !== undefined) {
+      const category = await Category.findOne({
+        _id: updateData.categoryId,
+        isActive: true,
+      }).select("_id");
+
+      if (!category) {
+        return res.status(400).json({
+          message: "Selected category does not exist or is inactive.",
+        });
+      }
+    }
 
     product.set(updateData);
 

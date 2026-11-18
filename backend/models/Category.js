@@ -190,7 +190,6 @@ categorySchema.pre("validate", async function () {
 // Indexes
 categorySchema.index({ parentCategory: 1, isActive: 1 });
 categorySchema.index({ name: 1 });
-categorySchema.index({ slug: 1 }, { unique: true });
 
 module.exports =
   mongoose.models.Category ||

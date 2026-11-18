@@ -18,7 +18,7 @@ const getAllUsers = async (req, res) => {
 
     const [users, totalUsers] = await Promise.all([
       User.find(filter)
-        .select("_id name email role isVerified sellerStatus verificationStatus createdAt")
+        .select("_id name email role status isVerified sellerStatus verificationStatus createdAt")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit),
@@ -137,35 +137,58 @@ const deleteUser = async (req, res) => {
     const { id } = req.params;
 
     if (!mongoose.isValidObjectId(id)) {
-      return res.status(400).json({ message: "Invalid user ID." });
+      return res.status(400).json({
+        message: "Invalid user ID.",
+      });
     }
 
     if (req.user._id.toString() === id) {
-      return res.status(400).json({ message: "You cannot delete your own account." });
+      return res.status(400).json({
+        message: "You cannot delete your own account.",
+      });
     }
 
     const user = await User.findById(id);
 
     if (!user) {
-      return res.status(404).json({ message: "User not found." });
+      return res.status(404).json({
+        message: "User not found.",
+      });
     }
 
-    if (user.role === "admin") {
-      const adminCount = await User.countDocuments({ role: "admin" });
+    // Prevent deactivation of the last active administrator.
+    if (
+      user.role === "admin" &&
+      !["suspended", "deactivated"].includes(user.status)
+    ) {
+      const activeAdminCount = await User.countDocuments({
+        role: "admin",
+        status: {
+          $nin: ["suspended", "deactivated"],
+        },
+      });
 
-      if (adminCount <= 1) {
+      if (activeAdminCount <= 1) {
         return res.status(400).json({
-          message: "Cannot delete the last administrator.",
+          message: "Cannot deactivate the last active administrator.",
         });
       }
     }
 
-    await user.deleteOne();
+    // Deactivate instead of permanently deleting the account.
+    user.status = "deactivated";
 
-    return res.status(200).json({ message: "User deleted successfully." });
+    await user.save();
+
+    return res.status(200).json({
+      message: "User account deactivated successfully.",
+    });
   } catch (error) {
     console.error("Delete user:", error);
-    return res.status(500).json({ message: "Unable to delete user." });
+
+    return res.status(500).json({
+      message: "Unable to deactivate user.",
+    });
   }
 };
 

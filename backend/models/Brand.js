@@ -75,7 +75,6 @@ brandSchema.pre("validate", function () {
 
 // Indexes
 brandSchema.index({ name: 1 });
-brandSchema.index({ slug: 1 }, { unique: true });
 
 module.exports =
   mongoose.models.Brand ||
