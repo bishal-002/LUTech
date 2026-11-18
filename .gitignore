@@ -1,15 +1,15 @@
-# Dependencies
-node_modules/
-**/node_modules/
+# # Dependencies
+# node_modules/
+# **/node_modules/
 
-# Environment files
-.env
-.env.*
-!.env.example
+# # Environment files
+# .env
+# .env.*
+# !.env.example
 
-# Build files
-dist/
-build/
+# # Build files
+# dist/
+# build/
 
-# Logs
-*.log
+# # Logs
+# *.log
