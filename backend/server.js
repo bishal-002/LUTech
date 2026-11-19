@@ -1,4 +1,3 @@
-
 require("dotenv").config();
 
 const dns = require("dns");
@@ -11,7 +10,10 @@ const mongoose = require("mongoose");
 
 const connectDB = require("./config/db");
 
-// Routes
+// ======================================================
+// ROUTES
+// ======================================================
+
 const userRoutes = require("./routes/userRoutes");
 const productRoutes = require("./routes/productRoutes");
 const cartRoutes = require("./routes/cartRoutes");
@@ -21,6 +23,7 @@ const testEmailRoute = require("./routes/testEmailRoute");
 const adminRoutes = require("./routes/adminRoutes");
 const adminProfileRoutes = require("./routes/adminProfileRoutes");
 const adminSecurityRoutes = require("./routes/adminSecurityRoutes");
+const platformSettingsRoutes = require("./routes/platformSettingsRoutes");
 const auditLogRoutes = require("./routes/auditLogRoutes");
 const productModerationRoutes = require("./routes/productModerationRoutes");
 
@@ -29,6 +32,10 @@ const sellerProfileRoutes = require("./routes/sellerProfileRoutes");
 
 const orderRoutes = require("./routes/orderRoutes");
 const customerOrderRoutes = require("./routes/customerOrderRoutes");
+
+// ======================================================
+// APPLICATION
+// ======================================================
 
 const app = express();
 
@@ -103,6 +110,11 @@ app.use(
 app.use(
   "/api/admin/profiles",
   adminProfileRoutes
+);
+
+app.use(
+  "/api/admin/platform-settings",
+  platformSettingsRoutes
 );
 
 app.use(

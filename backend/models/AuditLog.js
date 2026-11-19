@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 // ======================================================
@@ -39,6 +38,9 @@ const AUDIT_ACTIONS = [
   "ADMIN_2FA_ENABLED",
   "ADMIN_2FA_DISABLED",
   "ADMIN_PASSWORD_CHANGED",
+
+  // Platform configuration
+  "PLATFORM_SETTINGS_UPDATED",
 ];
 
 // ======================================================
@@ -53,6 +55,7 @@ const AUDIT_TARGET_TYPES = [
   "Order",
   "Category",
   "Payout",
+  "PlatformSettings",
 ];
 
 // ======================================================
@@ -68,6 +71,7 @@ const NOTE_REQUIRED_ACTIONS = [
   "ADMIN_PROFILE_DOWNGRADED",
   "ADMIN_2FA_DISABLED",
   "MANUAL_REFUND_ISSUED",
+  "PLATFORM_SETTINGS_UPDATED",
 ];
 
 // ======================================================
