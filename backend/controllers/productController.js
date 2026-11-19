@@ -229,6 +229,13 @@ const createProduct = async (req, res) => {
     productData.sellerId = sellerId;
     productData.seller = sellerId;
 
+    // Individual seller products require administrator review.
+    productData.moderationStatus =
+      user.role === "seller" &&
+        user.sellerType === "individual_seller"
+        ? "pending_review"
+        : "approved";
+
     const product = await Product.create(productData);
 
     return res.status(201).json({
@@ -401,6 +408,18 @@ const getProducts = async (req, res) => {
       };
     }
 
+    // Public listings show approved products only.
+    // Legacy products without moderationStatus remain visible.
+    filter.$and = [
+      ...(filter.$and || []),
+      {
+        $or: [
+          { moderationStatus: "approved" },
+          { moderationStatus: { $exists: false } },
+        ],
+      },
+    ];
+
     // Sorting.
     const sortOptions = {
       newest: { createdAt: -1 },
@@ -456,11 +475,13 @@ const getProductById = async (req, res) => {
       });
     }
 
-    const product = await Product.findById(id)
-      .populate("brandId", "name")
-      .populate("categoryId", "name")
-      .populate("sellerId", "name")
-      .lean();
+    const product = await Product.findOne({
+      _id: id,
+      $or: [
+        { moderationStatus: "approved" },
+        { moderationStatus: { $exists: false } },
+      ],
+    })
 
     if (!product) {
       return res.status(404).json({
@@ -574,6 +595,15 @@ const deleteProduct = async (req, res) => {
     const filter = getProductOwnershipFilter(req.user, id);
 
     const product = await Product.findOne(filter);
+
+    // Administrators must use the moderation suspension workflow.
+    // Sellers may delete their own products.
+    if (isAdmin(req.user)) {
+      return res.status(403).json({
+        message:
+          "Administrators must suspend products through the product moderation API.",
+      });
+    }
 
     if (!product) {
       return res.status(404).json({

@@ -1,6 +1,13 @@
 
 const mongoose = require("mongoose");
 const User = require("../models/User");
+const { writeAuditLog } = require("../services/auditLogService");
+
+const createControllerError = (statusCode, message) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
 
 const escapeRegex = (value) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -91,6 +98,17 @@ const updateUserRole = async (req, res) => {
       return res.status(404).json({ message: "User not found." });
     }
 
+
+    // Administrator accounts must be managed through
+    // the dedicated Admin Profile Management system.
+    if (user.role === "admin" || role === "admin") {
+      return res.status(400).json({
+        message:
+          "Use Admin Profile Management to create or modify administrator access.",
+      });
+    }
+
+
     if (user.role === "admin" && role !== "admin") {
       const adminCount = await User.countDocuments({ role: "admin" });
 
@@ -156,6 +174,16 @@ const deleteUser = async (req, res) => {
       });
     }
 
+    // Administrator accounts must be suspended or revoked
+    // through Admin Profile Management.
+    if (user.role === "admin") {
+      return res.status(400).json({
+        message:
+          "Use Admin Profile Management to suspend or revoke administrator access.",
+      });
+    }
+
+
     // Prevent deactivation of the last active administrator.
     if (
       user.role === "admin" &&
@@ -213,99 +241,226 @@ const getSellerApplications = async (req, res) => {
   }
 };
 
+
 const approveSeller = async (req, res) => {
+  let session;
+
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid applicant ID." });
-    }
-
-    const applicant = await User.findById(req.params.id);
-
-    if (
-      !applicant ||
-      applicant.sellerStatus !== "pending" ||
-      !["customer", "seller"].includes(applicant.role)
-    ) {
-      return res.status(404).json({
-        message: "Pending seller application not found.",
-      });
-    }
-
-    if (!applicant.isVerified) {
       return res.status(400).json({
-        message: "The applicant must verify their email first.",
+        message: "Invalid applicant ID.",
       });
     }
 
-    applicant.role = "seller";
-    applicant.sellerStatus = "approved";
-    applicant.verificationStatus = "approved";
-    applicant.adminReviewNote = "";
-    applicant.sellerApplication.reviewedAt = new Date();
+    session = await mongoose.startSession();
 
-    await applicant.save();
+    let approvedSellerId = null;
+
+    await session.withTransaction(async () => {
+      const applicant = await User.findById(
+        req.params.id
+      ).session(session);
+
+      if (
+        !applicant ||
+        applicant.sellerStatus !== "pending" ||
+        !["customer", "seller"].includes(applicant.role)
+      ) {
+        throw createControllerError(
+          404,
+          "Pending seller application not found."
+        );
+      }
+
+      if (!applicant.isVerified) {
+        throw createControllerError(
+          400,
+          "The applicant must verify their email first."
+        );
+      }
+
+      // Snapshot before changing the seller account.
+      const before = {
+        role: applicant.role,
+        sellerStatus: applicant.sellerStatus,
+        verificationStatus: applicant.verificationStatus,
+      };
+
+      applicant.role = "seller";
+      applicant.sellerStatus = "approved";
+      applicant.verificationStatus = "approved";
+      applicant.adminReviewNote = "";
+      applicant.sellerApplication.reviewedAt = new Date();
+
+      await applicant.save({ session });
+
+      const after = {
+        role: applicant.role,
+        sellerStatus: applicant.sellerStatus,
+        verificationStatus: applicant.verificationStatus,
+      };
+
+      // Record the approval in the same transaction.
+      await writeAuditLog({
+        adminId: req.user._id,
+        action: "SELLER_KYC_APPROVED",
+        targetType: "Seller",
+        targetId: applicant._id,
+        changes: {
+          before,
+          after,
+        },
+        session,
+      });
+
+      approvedSellerId = applicant._id;
+    });
+
+    const seller = await User.findById(approvedSellerId).select(
+      "_id name email role sellerStatus verificationStatus"
+    );
 
     return res.status(200).json({
       message: "Seller application approved.",
-      seller: {
-        _id: applicant._id,
-        name: applicant.name,
-        email: applicant.email,
-        role: applicant.role,
-        sellerStatus: applicant.sellerStatus,
-        verificationStatus: applicant.verificationStatus,
-      },
+      seller,
     });
   } catch (error) {
-    console.error("Approve seller:", error);
-    return res.status(500).json({ message: "Unable to approve seller." });
+    const statusCode = error.statusCode || 500;
+
+    if (statusCode === 500) {
+      console.error("Approve seller:", error);
+    }
+
+    return res.status(statusCode).json({
+      message:
+        statusCode === 500
+          ? "Unable to approve seller."
+          : error.message,
+    });
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 };
 
+
+
 const rejectSeller = async (req, res) => {
+  let session;
+
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid applicant ID." });
-    }
-
-    const applicant = await User.findById(req.params.id);
-
-    if (
-      !applicant ||
-      applicant.sellerStatus !== "pending" ||
-      !["customer", "seller"].includes(applicant.role)
-    ) {
-      return res.status(404).json({
-        message: "Pending seller application not found.",
+      return res.status(400).json({
+        message: "Invalid applicant ID.",
       });
     }
 
-    const reviewNote = String(req.body.reviewNote || "").trim();
+    const reviewNote =
+      typeof req.body.reviewNote === "string"
+        ? req.body.reviewNote.trim()
+        : "";
 
-    applicant.sellerStatus = "rejected";
-    applicant.verificationStatus = "rejected";
-    applicant.adminReviewNote = reviewNote;
-    applicant.sellerApplication.reviewNote = reviewNote;
-    applicant.sellerApplication.reviewedAt = new Date();
+    if (!reviewNote) {
+      return res.status(400).json({
+        message: "A rejection reason is required.",
+      });
+    }
 
-    await applicant.save();
+    if (reviewNote.length > 500) {
+      return res.status(400).json({
+        message: "Rejection reason cannot exceed 500 characters.",
+      });
+    }
 
-    return res.status(200).json({
-      message: "Seller application rejected.",
-      applicant: {
-        _id: applicant._id,
-        name: applicant.name,
-        email: applicant.email,
+    session = await mongoose.startSession();
+
+    let rejectedApplicantId = null;
+
+    await session.withTransaction(async () => {
+      const applicant = await User.findById(
+        req.params.id
+      ).session(session);
+
+      if (
+        !applicant ||
+        applicant.sellerStatus !== "pending" ||
+        !["customer", "seller"].includes(applicant.role)
+      ) {
+        throw createControllerError(
+          404,
+          "Pending seller application not found."
+        );
+      }
+
+      // Snapshot before changing the seller application.
+      const before = {
         role: applicant.role,
         sellerStatus: applicant.sellerStatus,
         verificationStatus: applicant.verificationStatus,
-      },
+      };
+
+      applicant.sellerStatus = "rejected";
+      applicant.verificationStatus = "rejected";
+      applicant.adminReviewNote = reviewNote;
+      applicant.sellerApplication.reviewNote = reviewNote;
+      applicant.sellerApplication.reviewedAt = new Date();
+
+      await applicant.save({ session });
+
+      const after = {
+        role: applicant.role,
+        sellerStatus: applicant.sellerStatus,
+        verificationStatus: applicant.verificationStatus,
+      };
+
+      // A rejection requires an internal audit note.
+      await writeAuditLog({
+        adminId: req.user._id,
+        action: "SELLER_KYC_REJECTED",
+        targetType: "Seller",
+        targetId: applicant._id,
+        changes: {
+          before,
+          after,
+        },
+        note: reviewNote,
+        session,
+      });
+
+      rejectedApplicantId = applicant._id;
+    });
+
+    const applicant = await User.findById(
+      rejectedApplicantId
+    ).select(
+      "_id name email role sellerStatus verificationStatus"
+    );
+
+    return res.status(200).json({
+      message: "Seller application rejected.",
+      applicant,
     });
   } catch (error) {
-    console.error("Reject seller:", error);
-    return res.status(500).json({ message: "Unable to reject seller." });
+    const statusCode = error.statusCode || 500;
+
+    if (statusCode === 500) {
+      console.error("Reject seller:", error);
+    }
+
+    return res.status(statusCode).json({
+      message:
+        statusCode === 500
+          ? "Unable to reject seller."
+          : error.message,
+    });
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 };
+
 
 module.exports = {
   getAllUsers,

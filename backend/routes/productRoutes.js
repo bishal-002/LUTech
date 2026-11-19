@@ -15,60 +15,84 @@ const {
   sellerOnly,
 } = require("../middleware/authMiddleware");
 
+const {
+  requireAdminPermission,
+} = require("../middleware/adminPermissionMiddleware");
+
 const router = express.Router();
 
-/*
-Authorization Middleware
-Allows administrators or approved sellers to manage products.
-*/
+// ======================================================
+// ADMIN OR APPROVED SELLER MIDDLEWARE
+// ======================================================
 
-const adminOrApprovedSeller = (req, res, next) => {
-  if (req.user && req.user.role === "admin") {
-    return next();
+const adminOrApprovedSeller = (permission) => {
+  return (req, res, next) => {
+    if (req.user?.role === "admin") {
+      return requireAdminPermission(permission)(
+        req,
+        res,
+        next
+      );
+    }
+
+    return sellerOnly(req, res, next);
+  };
+};
+
+// Administrators cannot permanently delete products.
+// They must use the suspension workflow instead.
+const approvedSellerOnly = (req, res, next) => {
+  if (req.user?.role === "admin") {
+    return res.status(403).json({
+      message:
+        "Administrators must suspend products through the moderation API.",
+    });
   }
 
   return sellerOnly(req, res, next);
 };
 
-/*
-Public Product Routes
-*/
+// ======================================================
+// PUBLIC PRODUCT ROUTES
+// ======================================================
 
-// Get all products
 router.get("/", getProducts);
 
-// Get products belonging to the authenticated seller
-router.get("/mine", protect, sellerOnly, getMyProducts);
+router.get(
+  "/mine",
+  protect,
+  sellerOnly,
+  getMyProducts
+);
 
-// Get a single product by ID
 router.get("/:id", getProductById);
 
-/*
-Product Management Routes
-Only administrators and approved sellers can manage products.
-*/
+// ======================================================
+// PRODUCT MANAGEMENT ROUTES
+// ======================================================
 
-// Create a product
+// Create product.
 router.post(
   "/",
   protect,
-  adminOrApprovedSeller,
+  adminOrApprovedSeller("approve_products"),
   createProduct
 );
 
-// Update a product
+// Update product.
 router.put(
   "/:id",
   protect,
-  adminOrApprovedSeller,
+  adminOrApprovedSeller("approve_products"),
   updateProduct
 );
 
-// Delete a product
+// Sellers can delete their own products.
+// Administrators must use the suspension API.
 router.delete(
   "/:id",
   protect,
-  adminOrApprovedSeller,
+  approvedSellerOnly,
   deleteProduct
 );
 

@@ -364,6 +364,58 @@ const productSchema = new mongoose.Schema(
     },
 
     // --------------------------------------------------
+    // ADMIN MODERATION
+    // --------------------------------------------------
+
+    moderationStatus: {
+      type: String,
+      enum: [
+        "pending_review",
+        "approved",
+        "rejected",
+        "suspended",
+      ],
+      default: "approved",
+      index: true,
+    },
+
+    moderationNote: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 500,
+      select: false,
+    },
+
+    moderatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    moderatedAt: {
+      type: Date,
+      default: null,
+    },
+
+    isGenuineVerified: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    genuineVerifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    genuineVerifiedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // --------------------------------------------------
     // PRODUCT IMAGES AND VIDEO
     // --------------------------------------------------
 
@@ -838,6 +890,11 @@ productSchema.index({
 
 productSchema.index({
   "variants.sku": 1,
+});
+
+productSchema.index({
+  moderationStatus: 1,
+  createdAt: -1,
 });
 
 // ======================================================

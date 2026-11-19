@@ -41,7 +41,7 @@ const protect = async (req, res, next) => {
     }
 
     const user = await User.findById(userId).select(
-      "_id name email role isVerified status sellerStatus verificationStatus"
+      "_id name email role isVerified status sellerStatus verificationStatus sellerType"
     );
 
     if (!user) {

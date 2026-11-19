@@ -15,10 +15,13 @@ const cartRoutes = require("./routes/cartRoutes");
 const catalogRoutes = require("./routes/catalogRoutes");
 const testEmailRoute = require("./routes/testEmailRoute");
 const adminRoutes = require("./routes/adminRoutes");
+const adminProfileRoutes = require("./routes/adminProfileRoutes");
 const sellerRoutes = require("./routes/sellerRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const sellerProfileRoutes = require("./routes/sellerProfileRoutes");
 const customerOrderRoutes = require("./routes/customerOrderRoutes");
+const auditLogRoutes = require("./routes/auditLogRoutes");
+const productModerationRoutes = require("./routes/productModerationRoutes");
 
 const app = express();
 
@@ -53,10 +56,19 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/catalog", catalogRoutes);
 app.use("/api/test-email", testEmailRoute);
 app.use("/api/admin", adminRoutes);
+app.use("/api/admin/profiles", adminProfileRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/seller", sellerRoutes);
 app.use("/api/seller/orders", orderRoutes);
 app.use("/api/seller/profile", sellerProfileRoutes);
 app.use("/api/orders", customerOrderRoutes);
+app.use("/api/admin/profiles", adminProfileRoutes);
+app.use("/api/admin/audit-logs", auditLogRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/admin/profiles", adminProfileRoutes);
+app.use("/api/admin/audit-logs", auditLogRoutes);
+app.use("/api/admin/products", productModerationRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "API endpoint not found." });
