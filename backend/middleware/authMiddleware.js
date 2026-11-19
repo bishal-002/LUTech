@@ -159,7 +159,7 @@ const protect = async (req, res, next) => {
       if (
         passwordChangedAt &&
         Number(decoded.iat || 0) <
-          Math.floor(passwordChangedAt.getTime() / 1000) + 1
+          Math.floor(passwordChangedAt.getTime() / 1000)
       ) {
         return res.status(401).json({
           message:
