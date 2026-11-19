@@ -207,7 +207,10 @@ const loginUser = async (req, res) => {
         const adminProfile = await AdminProfile.findOne({
             userId: user._id,
         }).select([
+            "+security.twoFactorSecretEncrypted",
             "+security.twoFactorLoginOtpHash",
+            "+security.twoFactorLoginOtpExpiresAt",
+            "+security.twoFactorLoginOtpAttempts",
             "+security.twoFactorLoginOtpSentAt",
             "+security.twoFactorLoginOtpSendCount",
             "+security.twoFactorLoginOtpWindowStart",
