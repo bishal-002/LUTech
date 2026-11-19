@@ -1,5 +1,6 @@
 
 const mongoose = require("mongoose");
+const net = require("node:net");
 
 const User = require("../models/User");
 const AdminProfile = require("../models/AdminProfile");
@@ -28,6 +29,8 @@ const ADMIN_STATUSES = [
   "suspended",
   "revoked",
 ];
+
+const MAX_ALLOWED_IPS = 20;
 
 // ======================================================
 // CUSTOM HTTP ERROR
@@ -88,7 +91,7 @@ const preventSelfManagement = (profile, req) => {
   if (profile.userId.toString() === req.user._id.toString()) {
     throw new HttpError(
       400,
-      "You cannot modify your own administrator profile."
+      "You cannot modify your own administrator role, permissions or status."
     );
   }
 };
@@ -112,19 +115,309 @@ const ensureAnotherActiveSuperAdminExists = async (
 };
 
 // ======================================================
+// PHONE NUMBER HELPERS
+// ======================================================
+
+// Accepted input examples:
+// 017XXXXXXXX
+// +88017XXXXXXXX
+// 88017XXXXXXXX
+//
+// Stored format:
+// +88017XXXXXXXX
+
+const normalizeAdminPhone = (phone) => {
+  if (typeof phone !== "string") return "";
+
+  let value = phone.trim().replace(/[\s-]/g, "");
+
+  if (/^01[3-9]\d{8}$/.test(value)) {
+    value = `+880${value.slice(1)}`;
+  } else if (/^8801[3-9]\d{8}$/.test(value)) {
+    value = `+${value}`;
+  }
+
+  return value;
+};
+
+const isValidAdminPhone = (phone) =>
+  /^\+8801[3-9]\d{8}$/.test(phone);
+
+// Mask phone numbers in audit records.
+const maskPhone = (phone) => {
+  if (typeof phone !== "string" || phone.length < 8) {
+    return "";
+  }
+
+  return `${phone.slice(0, 6)}******${phone.slice(-3)}`;
+};
+
+// ======================================================
+// IP ADDRESS AND CIDR HELPERS
+// ======================================================
+
+const parseIpAddress = (input) => {
+  if (typeof input !== "string" || !input.trim()) {
+    return null;
+  }
+
+  let address = input.trim();
+
+  if (address.startsWith("[") && address.endsWith("]")) {
+    address = address.slice(1, -1);
+  }
+
+  address = address.split("%")[0];
+
+  const version = net.isIP(address);
+
+  if (version === 4) {
+    const parts = address.split(".").map(Number);
+
+    const value = parts.reduce(
+      (result, part) => (result << 8n) | BigInt(part),
+      0n
+    );
+
+    return {
+      version: 4,
+      value,
+      mapped: false,
+    };
+  }
+
+  if (version !== 6) {
+    return null;
+  }
+
+  let normalized = address.toLowerCase();
+
+  // Convert an embedded IPv4 suffix into two IPv6 groups.
+  if (normalized.includes(".")) {
+    const lastColon = normalized.lastIndexOf(":");
+
+    if (lastColon < 0) return null;
+
+    const ipv4 = normalized.slice(lastColon + 1);
+
+    if (net.isIP(ipv4) !== 4) return null;
+
+    const octets = ipv4.split(".").map(Number);
+
+    const firstGroup = (
+      (octets[0] << 8) | octets[1]
+    ).toString(16);
+
+    const secondGroup = (
+      (octets[2] << 8) | octets[3]
+    ).toString(16);
+
+    normalized =
+      normalized.slice(0, lastColon + 1) +
+      firstGroup +
+      ":" +
+      secondGroup;
+  }
+
+  const halves = normalized.split("::");
+
+  if (halves.length > 2) return null;
+
+  let groups;
+
+  if (halves.length === 2) {
+    const left = halves[0] ? halves[0].split(":") : [];
+    const right = halves[1] ? halves[1].split(":") : [];
+
+    const missingGroups = 8 - left.length - right.length;
+
+    if (missingGroups < 1) return null;
+
+    groups = [
+      ...left,
+      ...Array(missingGroups).fill("0"),
+      ...right,
+    ];
+  } else {
+    groups = normalized.split(":");
+
+    if (groups.length !== 8) return null;
+  }
+
+  if (
+    groups.length !== 8 ||
+    groups.some(
+      (group) => !/^[0-9a-f]{1,4}$/.test(group)
+    )
+  ) {
+    return null;
+  }
+
+  const value = groups.reduce(
+    (result, group) =>
+      (result << 16n) | BigInt(parseInt(group, 16)),
+    0n
+  );
+
+  // Normalize IPv4-mapped IPv6 addresses.
+  const mapped = (value >> 32n) === 0xffffn;
+
+  if (mapped) {
+    return {
+      version: 4,
+      value: value & ((1n << 32n) - 1n),
+      mapped: true,
+    };
+  }
+
+  return {
+    version: 6,
+    value,
+    mapped: false,
+  };
+};
+
+// Parse a single IP address or CIDR rule.
+const parseAllowedIpRule = (rule) => {
+  if (typeof rule !== "string") return null;
+
+  const parts = rule.trim().split("/");
+
+  if (parts.length > 2 || !parts[0]) {
+    return null;
+  }
+
+  const parsedIp = parseIpAddress(parts[0]);
+
+  if (!parsedIp) return null;
+
+  const maxBits = parsedIp.version === 4 ? 32 : 128;
+
+  let prefix;
+
+  if (parts.length === 1) {
+    prefix = maxBits;
+  } else {
+    if (!/^\d+$/.test(parts[1])) {
+      return null;
+    }
+
+    prefix = Number(parts[1]);
+
+    // Convert mapped IPv6 prefixes to IPv4 prefixes.
+    if (parsedIp.mapped) {
+      if (prefix < 96) return null;
+      prefix -= 96;
+    }
+  }
+
+  if (
+    !Number.isInteger(prefix) ||
+    prefix < 0 ||
+    prefix > (parsedIp.version === 4 ? 32 : 128)
+  ) {
+    return null;
+  }
+
+  return {
+    ...parsedIp,
+    prefix,
+  };
+};
+
+// Validate, normalize and remove duplicate IP rules.
+const normalizeAllowedIps = (allowedIps) => {
+  if (!Array.isArray(allowedIps)) {
+    throw new HttpError(
+      400,
+      "Allowed IPs must be provided as an array."
+    );
+  }
+
+  if (allowedIps.length > MAX_ALLOWED_IPS) {
+    throw new HttpError(
+      400,
+      `A maximum of ${MAX_ALLOWED_IPS} IP or CIDR rules is allowed.`
+    );
+  }
+
+  const normalized = [];
+
+  for (const item of allowedIps) {
+    if (typeof item !== "string" || !item.trim()) {
+      throw new HttpError(
+        400,
+        "Every allowed IP entry must be a non-empty string."
+      );
+    }
+
+    const rule = item.trim().toLowerCase();
+
+    if (!parseAllowedIpRule(rule)) {
+      throw new HttpError(
+        400,
+        `Invalid IP address or CIDR rule: ${item}`
+      );
+    }
+
+    if (normalized.includes(rule)) {
+      throw new HttpError(
+        400,
+        `Duplicate IP rule: ${rule}`
+      );
+    }
+
+    normalized.push(rule);
+  }
+
+  return normalized;
+};
+
+// Check whether an IP belongs to a whitelist rule.
+const ipMatchesRule = (requestIp, rule) => {
+  const request = parseIpAddress(requestIp);
+  const network = parseAllowedIpRule(rule);
+
+  if (
+    !request ||
+    !network ||
+    request.version !== network.version
+  ) {
+    return false;
+  }
+
+  const bits = network.version === 4 ? 32 : 128;
+  const shift = BigInt(bits - network.prefix);
+
+  return (
+    (request.value >> shift) ===
+    (network.value >> shift)
+  );
+};
+
+const isIpAllowed = (requestIp, allowedIps) => {
+  if (!Array.isArray(allowedIps)) return false;
+
+  return allowedIps.some((rule) =>
+    ipMatchesRule(requestIp, rule)
+  );
+};
+
+// ======================================================
 // AUDIT HELPERS
 // ======================================================
 
-// Keep audit snapshots limited to non-sensitive profile data.
 const createAuditSnapshot = (profile) => ({
   userId: profile.userId.toString(),
   adminRole: profile.adminRole,
   permissions: [...profile.permissions],
   department: profile.department || null,
   status: profile.status,
+  allowedIps: [
+    ...(profile.security?.allowedIps || []),
+  ],
 });
 
-// Validate and normalize the internal audit note.
 const normalizeAuditNote = (note, required = false) => {
   if (note === undefined || note === null) {
     if (required) {
@@ -171,7 +464,8 @@ const normalizePermissions = (
   adminRole,
   requestedPermissions
 ) => {
-  const defaultPermissions = getDefaultPermissions(adminRole);
+  const defaultPermissions =
+    getDefaultPermissions(adminRole);
 
   if (requestedPermissions === undefined) {
     return defaultPermissions;
@@ -293,7 +587,10 @@ const getAdminProfiles = async (req, res) => {
       filter.status = req.query.status;
     }
 
-    if (req.query.search?.trim()) {
+    if (
+      typeof req.query.search === "string" &&
+      req.query.search.trim()
+    ) {
       const searchTerm = req.query.search.trim();
 
       const escapedSearch = searchTerm.replace(
@@ -341,7 +638,6 @@ const getAdminProfiles = async (req, res) => {
           .skip((page - 1) * limit)
           .limit(limit)
       ),
-
       AdminProfile.countDocuments(filter),
     ]);
 
@@ -418,6 +714,7 @@ const createAdminProfile = async (req, res) => {
       adminRole,
       department,
       permissions,
+      phone,
     } = req.body;
 
     if (!mongoose.isValidObjectId(userId)) {
@@ -459,7 +756,10 @@ const createAdminProfile = async (req, res) => {
       const user = await User.findById(userId).session(session);
 
       if (!user) {
-        throw new HttpError(404, "User account not found.");
+        throw new HttpError(
+          404,
+          "User account not found."
+        );
       }
 
       if (!["customer", "admin"].includes(user.role)) {
@@ -483,6 +783,17 @@ const createAdminProfile = async (req, res) => {
         );
       }
 
+      if (
+        typeof user.name !== "string" ||
+        user.name.trim().length < 2 ||
+        user.name.trim().length > 80
+      ) {
+        throw new HttpError(
+          400,
+          "Administrator full name must be between 2 and 80 characters."
+        );
+      }
+
       const existingProfile = await AdminProfile.findOne({
         userId: user._id,
       }).session(session);
@@ -494,7 +805,40 @@ const createAdminProfile = async (req, res) => {
         );
       }
 
+      // A new phone may be supplied, or the existing User phone
+      // will be used. Administrators must have a valid phone.
+      const finalPhone = normalizeAdminPhone(
+        phone !== undefined ? phone : user.phone
+      );
+
+      if (!isValidAdminPhone(finalPhone)) {
+        throw new HttpError(
+          400,
+          "A valid Bangladesh administrator phone number is required. Use +8801XXXXXXXXX."
+        );
+      }
+
+      if (finalPhone !== user.phone) {
+        const duplicatePhone = await User.findOne({
+          phone: finalPhone,
+          _id: { $ne: user._id },
+        })
+          .select("_id")
+          .session(session);
+
+        if (duplicatePhone) {
+          throw new HttpError(
+            409,
+            "This phone number is already registered."
+          );
+        }
+
+        user.phone = finalPhone;
+        user.isPhoneVerified = false;
+      }
+
       user.role = "admin";
+
       await user.save({ session });
 
       const [profile] = await AdminProfile.create(
@@ -513,7 +857,6 @@ const createAdminProfile = async (req, res) => {
         { session }
       );
 
-      // Record creation in the same transaction.
       await writeAuditLog({
         adminId: req.user._id,
         action: "ADMIN_PROFILE_CREATED",
@@ -521,7 +864,10 @@ const createAdminProfile = async (req, res) => {
         targetId: profile._id,
         changes: {
           before: null,
-          after: createAuditSnapshot(profile),
+          after: {
+            ...createAuditSnapshot(profile),
+            phone: maskPhone(user.phone),
+          },
         },
         session,
       });
@@ -570,20 +916,23 @@ const updateAdminProfile = async (req, res) => {
       );
     }
 
-    const hasAdminRole = Object.prototype.hasOwnProperty.call(
-      req.body,
-      "adminRole"
-    );
+    const hasAdminRole =
+      Object.prototype.hasOwnProperty.call(
+        req.body,
+        "adminRole"
+      );
 
-    const hasPermissions = Object.prototype.hasOwnProperty.call(
-      req.body,
-      "permissions"
-    );
+    const hasPermissions =
+      Object.prototype.hasOwnProperty.call(
+        req.body,
+        "permissions"
+      );
 
-    const hasDepartment = Object.prototype.hasOwnProperty.call(
-      req.body,
-      "department"
-    );
+    const hasDepartment =
+      Object.prototype.hasOwnProperty.call(
+        req.body,
+        "department"
+      );
 
     if (!hasAdminRole && !hasPermissions && !hasDepartment) {
       throw new HttpError(
@@ -592,7 +941,6 @@ const updateAdminProfile = async (req, res) => {
       );
     }
 
-    // This is the note used when a Super Admin is downgraded.
     const suppliedNote = normalizeAuditNote(req.body.note);
 
     session = await mongoose.startSession();
@@ -650,7 +998,8 @@ const updateAdminProfile = async (req, res) => {
         nextDepartment = department || null;
       }
 
-      const roleChanged = nextAdminRole !== profile.adminRole;
+      const roleChanged =
+        nextAdminRole !== profile.adminRole;
 
       const nextPermissions =
         hasPermissions || roleChanged
@@ -680,7 +1029,6 @@ const updateAdminProfile = async (req, res) => {
         );
       }
 
-      // A downgrade requires a reason.
       const isDowngrade =
         profile.adminRole === "super_admin" &&
         nextAdminRole !== "super_admin";
@@ -690,7 +1038,11 @@ const updateAdminProfile = async (req, res) => {
         isDowngrade
       );
 
-      if (!roleChanged && !permissionsChanged && !departmentChanged) {
+      if (
+        !roleChanged &&
+        !permissionsChanged &&
+        !departmentChanged
+      ) {
         throw new HttpError(
           400,
           "No changes were detected in the administrator profile."
@@ -709,11 +1061,14 @@ const updateAdminProfile = async (req, res) => {
 
       if (isDowngrade) {
         action = "ADMIN_PROFILE_DOWNGRADED";
-      } else if (permissionsChanged && !roleChanged && !departmentChanged) {
+      } else if (
+        permissionsChanged &&
+        !roleChanged &&
+        !departmentChanged
+      ) {
         action = "ADMIN_PERMISSIONS_UPDATED";
       }
 
-      // Store the change and audit entry atomically.
       await writeAuditLog({
         adminId: req.user._id,
         action,
@@ -777,7 +1132,6 @@ const updateAdminProfileStatus = async (req, res) => {
       );
     }
 
-    // Suspension and revocation require a reason.
     const note = normalizeAuditNote(
       req.body.note,
       status === "suspended" || status === "revoked"
@@ -824,8 +1178,6 @@ const updateAdminProfileStatus = async (req, res) => {
         );
       }
 
-      // The linked User account must be active before
-      // an administrator profile can be reactivated.
       if (status === "active" && user.status !== "active") {
         throw new HttpError(
           400,
@@ -833,7 +1185,6 @@ const updateAdminProfileStatus = async (req, res) => {
         );
       }
 
-      // Protect the last active Super Admin.
       if (
         profile.adminRole === "super_admin" &&
         profile.status === "active" &&
@@ -846,7 +1197,6 @@ const updateAdminProfileStatus = async (req, res) => {
       }
 
       const before = createAuditSnapshot(profile);
-      const previousStatus = profile.status;
 
       profile.status = status;
 
@@ -876,9 +1226,6 @@ const updateAdminProfileStatus = async (req, res) => {
         note: note || undefined,
         session,
       });
-
-      // Previous status is retained in the audit diff.
-      void previousStatus;
     });
 
     const updatedProfile = await populateAdminProfile(
@@ -903,6 +1250,253 @@ const updateAdminProfileStatus = async (req, res) => {
 };
 
 // ======================================================
+// UPDATE ADMIN SECURITY SETTINGS
+// PATCH /api/admin/profiles/:id/security
+// ======================================================
+
+const updateAdminSecuritySettings = async (req, res) => {
+  let session;
+
+  try {
+    if (!ensureSuperAdmin(req, res)) return;
+
+    const { id } = req.params;
+    const body = req.body || {};
+
+    if (!mongoose.isValidObjectId(id)) {
+      throw new HttpError(
+        400,
+        "Invalid administrator profile ID."
+      );
+    }
+
+    const allowedBodyFields = [
+      "phone",
+      "allowedIps",
+      "note",
+    ];
+
+    const unexpectedFields = Object.keys(body).filter(
+      (field) => !allowedBodyFields.includes(field)
+    );
+
+    if (unexpectedFields.length > 0) {
+      throw new HttpError(
+        400,
+        `Unsupported security fields: ${unexpectedFields.join(", ")}`
+      );
+    }
+
+    const hasPhone =
+      Object.prototype.hasOwnProperty.call(body, "phone");
+
+    const hasAllowedIps =
+      Object.prototype.hasOwnProperty.call(body, "allowedIps");
+
+    if (!hasPhone && !hasAllowedIps) {
+      throw new HttpError(
+        400,
+        "Provide a phone number or an allowed IP list to update."
+      );
+    }
+
+    const note = normalizeAuditNote(body.note);
+
+    session = await mongoose.startSession();
+
+    await session.withTransaction(async () => {
+      const profile = await AdminProfile.findById(id).session(
+        session
+      );
+
+      if (!profile) {
+        throw new HttpError(
+          404,
+          "Administrator profile not found."
+        );
+      }
+
+      if (profile.status === "revoked") {
+        throw new HttpError(
+          400,
+          "Security settings cannot be changed for a revoked administrator."
+        );
+      }
+
+      const user = await User.findById(
+        profile.userId
+      ).session(session);
+
+      if (!user) {
+        throw new HttpError(
+          404,
+          "The linked administrator user account was not found."
+        );
+      }
+
+      const isOwnProfile =
+        user._id.toString() === req.user._id.toString();
+
+      const previousPhone = user.phone || "";
+      const previousAllowedIps = [
+        ...(profile.security?.allowedIps || []),
+      ];
+
+      let nextPhone = previousPhone;
+      let nextAllowedIps = previousAllowedIps;
+
+      // -----------------------------------------------
+      // PHONE NUMBER
+      // -----------------------------------------------
+
+      if (hasPhone) {
+        if (typeof body.phone !== "string") {
+          throw new HttpError(
+            400,
+            "Administrator phone number must be text."
+          );
+        }
+
+        nextPhone = normalizeAdminPhone(body.phone);
+
+        if (!isValidAdminPhone(nextPhone)) {
+          throw new HttpError(
+            400,
+            "Enter a valid Bangladesh phone number, such as +8801XXXXXXXXX."
+          );
+        }
+
+        if (nextPhone !== previousPhone) {
+          const duplicatePhone = await User.findOne({
+            phone: nextPhone,
+            _id: { $ne: user._id },
+          })
+            .select("_id")
+            .session(session);
+
+          if (duplicatePhone) {
+            throw new HttpError(
+              409,
+              "This phone number is already registered."
+            );
+          }
+
+          user.phone = nextPhone;
+          user.isPhoneVerified = false;
+        }
+      }
+
+      // -----------------------------------------------
+      // IP WHITELIST
+      // -----------------------------------------------
+
+      if (hasAllowedIps) {
+        nextAllowedIps = normalizeAllowedIps(
+          body.allowedIps
+        );
+
+        const requiresIpRestriction =
+          profile.adminRole === "super_admin" ||
+          profile.department === "Finance";
+
+        if (!requiresIpRestriction && nextAllowedIps.length > 0) {
+          throw new HttpError(
+            400,
+            "IP restrictions can only be configured for Super Admins and Finance department administrators."
+          );
+        }
+
+        // Prevent a Super Admin from blocking their own
+        // current IP address when configuring their profile.
+        if (
+          isOwnProfile &&
+          requiresIpRestriction &&
+          nextAllowedIps.length > 0
+        ) {
+          const currentIp =
+            req.ip || req.socket?.remoteAddress || "";
+
+          if (!isIpAllowed(currentIp, nextAllowedIps)) {
+            throw new HttpError(
+              400,
+              "Your current IP address is not included in the new whitelist. Add your current IP before saving."
+            );
+          }
+        }
+
+        profile.security.allowedIps = nextAllowedIps;
+      }
+
+      const phoneChanged = nextPhone !== previousPhone;
+
+      const allowedIpsChanged =
+        JSON.stringify([...previousAllowedIps].sort()) !==
+        JSON.stringify([...nextAllowedIps].sort());
+
+      if (!phoneChanged && !allowedIpsChanged) {
+        throw new HttpError(
+          400,
+          "No changes were detected in the administrator security settings."
+        );
+      }
+
+      if (phoneChanged) {
+        await user.save({ session });
+      }
+
+      if (allowedIpsChanged) {
+        await profile.save({ session });
+      }
+
+      // Do not include unmasked phone numbers in audit records.
+      const before = {
+        userId: user._id.toString(),
+        phone: maskPhone(previousPhone),
+        allowedIps: previousAllowedIps,
+      };
+
+      const after = {
+        userId: user._id.toString(),
+        phone: maskPhone(nextPhone),
+        allowedIps: nextAllowedIps,
+      };
+
+      await writeAuditLog({
+        adminId: req.user._id,
+        action: "ADMIN_PROFILE_UPDATED",
+        targetType: "AdminProfile",
+        targetId: profile._id,
+        changes: {
+          before,
+          after,
+        },
+        note: note || undefined,
+        session,
+      });
+    });
+
+    const updatedProfile = await populateAdminProfile(
+      AdminProfile.findById(id)
+    );
+
+    return res.status(200).json({
+      message: "Administrator security settings updated successfully.",
+      profile: updatedProfile,
+    });
+  } catch (error) {
+    return handleControllerError(
+      res,
+      error,
+      "Unable to update administrator security settings."
+    );
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
+  }
+};
+
+// ======================================================
 // EXPORTS
 // ======================================================
 
@@ -912,4 +1506,5 @@ module.exports = {
   createAdminProfile,
   updateAdminProfile,
   updateAdminProfileStatus,
+  updateAdminSecuritySettings,
 };

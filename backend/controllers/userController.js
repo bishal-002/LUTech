@@ -1,13 +1,16 @@
 
 const User = require("../models/User");
 const Product = require("../models/Product");
+const AdminProfile = require("../models/AdminProfile");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 
+// ======================================================
 // SAFE RESPONSE FIELDS
+// ======================================================
 
 const PUBLIC_SELLER_FIELDS = [
   "_id",
@@ -31,11 +34,29 @@ const PUBLIC_SELLER_FIELDS = [
 ].join(" ");
 
 const SAFE_USER_FIELDS = [
-  "_id", "name", "email", "role", "isVerified", "status",
-  "phone", "isPhoneVerified", "avatarUrl", "address", "addresses",
-  "wishlist", "priceAlerts", "ownedDevices", "recentlyViewed",
-  "billingProfile", "preferences", "customerMetrics", "lastLoginAt",
-  "sellerStatus", "verificationStatus", "createdAt", "updatedAt",
+  "_id",
+  "name",
+  "email",
+  "role",
+  "isVerified",
+  "status",
+  "phone",
+  "isPhoneVerified",
+  "avatarUrl",
+  "address",
+  "addresses",
+  "wishlist",
+  "priceAlerts",
+  "ownedDevices",
+  "recentlyViewed",
+  "billingProfile",
+  "preferences",
+  "customerMetrics",
+  "lastLoginAt",
+  "sellerStatus",
+  "verificationStatus",
+  "createdAt",
+  "updatedAt",
 ].join(" ");
 
 const normalizeEmail = (email) =>
@@ -91,8 +112,13 @@ const registerUser = async (req, res) => {
       });
     }
 
-    const maximumNameLength = accountType === "customer" ? 80 : 100;
-    if (name.trim().length < 2 || name.trim().length > maximumNameLength) {
+    const maximumNameLength =
+      accountType === "customer" ? 80 : 100;
+
+    if (
+      name.trim().length < 2 ||
+      name.trim().length > maximumNameLength
+    ) {
       return res.status(400).json({
         message: `Name must be between 2 and ${maximumNameLength} characters.`,
       });
@@ -146,8 +172,7 @@ const registerUser = async (req, res) => {
       role: accountType,
       sellerStatus:
         accountType === "seller" ? "pending" : "not_applicable",
-      verificationStatus:
-        accountType === "seller" ? "pending_review" : "pending_review",
+      verificationStatus: "pending_review",
       otp: hashedOTP,
       otpExpires,
       otpAttempts: 0,
@@ -197,7 +222,9 @@ const registerUser = async (req, res) => {
   }
 };
 
+// ======================================================
 // LOGIN USER
+// ======================================================
 
 const loginUser = async (req, res) => {
   try {
@@ -251,11 +278,16 @@ const loginUser = async (req, res) => {
       );
     }
 
+    // ==================================================
+    // USER ACCOUNT STATUS
+    // ==================================================
+
     if (user.status && user.status !== "active") {
       return res.status(403).json({
-        message: user.status === "deactivated"
-          ? "This account has been deactivated."
-          : "Your account has been suspended.",
+        message:
+          user.status === "deactivated"
+            ? "This account has been deactivated."
+            : "Your account has been suspended.",
       });
     }
 
@@ -268,7 +300,49 @@ const loginUser = async (req, res) => {
       });
     }
 
-    // Record the user's last successful login.
+    // ==================================================
+    // ADMIN LOGIN SECURITY
+    // ==================================================
+
+    let adminProfile = null;
+
+    if (user.role === "admin") {
+      adminProfile = await AdminProfile.findOne({
+        userId: user._id,
+      })
+        .select(
+          "_id adminRole department status security.twoFactorEnabled security.twoFactorMethod"
+        )
+        .lean();
+
+      // Admin accounts must have an associated AdminProfile.
+      if (!adminProfile) {
+        return res.status(403).json({
+          message:
+            "Administrator profile is not configured. Please contact the Super Admin.",
+          code: "ADMIN_PROFILE_MISSING",
+        });
+      }
+
+      // Prevent suspended or revoked administrators from logging in.
+      if (adminProfile.status !== "active") {
+        return res.status(403).json({
+          message:
+            adminProfile.status === "revoked"
+              ? "Your administrator access has been revoked."
+              : "Your administrator account is suspended.",
+          code:
+            adminProfile.status === "revoked"
+              ? "ADMIN_ACCESS_REVOKED"
+              : "ADMIN_ACCOUNT_SUSPENDED",
+        });
+      }
+    }
+
+    // ==================================================
+    // RECORD SUCCESSFUL LOGIN
+    // ==================================================
+
     const lastLoginAt = new Date();
 
     await User.updateOne(
@@ -279,6 +353,32 @@ const loginUser = async (req, res) => {
         },
       }
     );
+
+    // Record administrator login metadata separately.
+    // Do not trust arbitrary X-Forwarded-For headers here.
+    if (user.role === "admin" && adminProfile) {
+      const loginIp =
+        req.ip || req.socket?.remoteAddress || "";
+
+      const userAgent =
+        typeof req.get === "function"
+          ? (req.get("user-agent") || "").slice(0, 500)
+          : "";
+
+      await AdminProfile.updateOne(
+        { userId: user._id },
+        {
+          $set: {
+            "security.lastLoginIp": loginIp,
+            "security.lastUserAgent": userAgent,
+          },
+        }
+      );
+    }
+
+    // ==================================================
+    // GENERATE JWT
+    // ==================================================
 
     const token = jwt.sign(
       { userId: user._id.toString() },
@@ -306,7 +406,10 @@ const loginUser = async (req, res) => {
   }
 };
 
+// ======================================================
 // VERIFY OTP
+// ======================================================
+
 const verifyOTP = async (req, res) => {
   try {
     const email = normalizeEmail(req.body.email);
@@ -412,7 +515,9 @@ const verifyOTP = async (req, res) => {
   }
 };
 
+// ======================================================
 // RESEND OTP
+// ======================================================
 
 const resendOTP = async (req, res) => {
   try {
@@ -462,7 +567,7 @@ const resendOTP = async (req, res) => {
     const cooldownActive =
       user.otpLastSentAt &&
       now.getTime() - user.otpLastSentAt.getTime() <
-      OTP_RESEND_COOLDOWN_MS;
+        OTP_RESEND_COOLDOWN_MS;
 
     // Maximum 5 OTP emails per hour.
     if (cooldownActive || sendCount >= OTP_MAX_SENDS_PER_WINDOW) {
@@ -496,7 +601,8 @@ const resendOTP = async (req, res) => {
       console.error("Resend OTP email failed:", mailError);
 
       return res.status(503).json({
-        message: "Unable to send verification email. Please try again later.",
+        message:
+          "Unable to send verification email. Please try again later.",
       });
     }
 
@@ -509,19 +615,26 @@ const resendOTP = async (req, res) => {
   }
 };
 
-// CUSTOMER PROFILE
+// ======================================================
+// CUSTOMER PROFILE HELPERS
+// ======================================================
 
 const isValidBdPhone = (phone) =>
   /^(?:\+8801|01)[3-9]\d{8}$/.test(phone);
 
 const normalizeBdPhone = (phone) => {
   const value = String(phone || "").replace(/[\s-]/g, "");
-  if (value.startsWith("01")) return `+880${value.slice(1)}`;
+
+  if (value.startsWith("01")) {
+    return `+880${value.slice(1)}`;
+  }
+
   return value;
 };
 
 const isHttpUrlOrEmpty = (value) => {
   if (value === "") return true;
+
   try {
     const parsed = new URL(value);
     return ["http:", "https:"].includes(parsed.protocol);
@@ -530,10 +643,21 @@ const isHttpUrlOrEmpty = (value) => {
   }
 };
 
+// ======================================================
+// GET USER PROFILE
+// ======================================================
+
 const getUserProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select(SAFE_USER_FIELDS);
-    if (!user) return res.status(404).json({ message: "User not found." });
+    const user = await User.findById(req.user._id)
+      .select(SAFE_USER_FIELDS);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found.",
+      });
+    }
+
     return res.status(200).json({ user });
   } catch (error) {
     console.error("Get user profile error:", error);
@@ -541,50 +665,110 @@ const getUserProfile = async (req, res) => {
   }
 };
 
+// ======================================================
+// UPDATE USER PROFILE
+// ======================================================
+
 const updateUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ message: "User not found." });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found.",
+      });
+    }
 
     const name = req.body.name ?? req.body.fullName;
-    const { address, phone, avatarUrl, addresses, billingProfile, preferences, ownedDevices } = req.body;
+
+    const {
+      address,
+      phone,
+      avatarUrl,
+      addresses,
+      billingProfile,
+      preferences,
+      ownedDevices,
+    } = req.body;
 
     if (name !== undefined) {
-      const maximumNameLength = user.role === "customer" ? 80 : 100;
-      if (typeof name !== "string" || name.trim().length < 2 || name.trim().length > maximumNameLength) {
-        return res.status(400).json({ message: `Full name must be between 2 and ${maximumNameLength} characters.` });
+      const maximumNameLength =
+        user.role === "customer" ? 80 : 100;
+
+      if (
+        typeof name !== "string" ||
+        name.trim().length < 2 ||
+        name.trim().length > maximumNameLength
+      ) {
+        return res.status(400).json({
+          message: `Full name must be between 2 and ${maximumNameLength} characters.`,
+        });
       }
+
       user.name = name.trim();
     }
 
     if (address !== undefined) {
-      if (typeof address !== "string" || address.trim().length > 500) {
-        return res.status(400).json({ message: "Address must be valid text up to 500 characters." });
+      if (
+        typeof address !== "string" ||
+        address.trim().length > 500
+      ) {
+        return res.status(400).json({
+          message: "Address must be valid text up to 500 characters.",
+        });
       }
+
       user.address = address.trim();
     }
 
-    const hasCustomerFields = [phone, avatarUrl, addresses, billingProfile, preferences, ownedDevices]
-      .some((value) => value !== undefined);
+    const hasCustomerFields = [
+      phone,
+      avatarUrl,
+      addresses,
+      billingProfile,
+      preferences,
+      ownedDevices,
+    ].some((value) => value !== undefined);
 
     if (hasCustomerFields && user.role !== "customer") {
-      return res.status(403).json({ message: "Customer account fields can only be changed by customer accounts." });
+      return res.status(403).json({
+        message:
+          "Customer account fields can only be changed by customer accounts.",
+      });
     }
 
     if (phone !== undefined) {
       if (typeof phone !== "string") {
-        return res.status(400).json({ message: "Phone number must be text." });
+        return res.status(400).json({
+          message: "Phone number must be text.",
+        });
       }
+
       const normalizedPhone = normalizeBdPhone(phone);
+
       if (normalizedPhone && !isValidBdPhone(normalizedPhone)) {
-        return res.status(400).json({ message: "Enter a valid Bangladesh phone number, such as +8801XXXXXXXXX." });
+        return res.status(400).json({
+          message:
+            "Enter a valid Bangladesh phone number, such as +8801XXXXXXXXX.",
+        });
       }
+
       if (normalizedPhone) {
-        const duplicate = await User.findOne({ phone: normalizedPhone, _id: { $ne: user._id } }).select("_id");
-        if (duplicate) return res.status(409).json({ message: "This phone number is already registered." });
+        const duplicate = await User.findOne({
+          phone: normalizedPhone,
+          _id: { $ne: user._id },
+        }).select("_id");
+
+        if (duplicate) {
+          return res.status(409).json({
+            message: "This phone number is already registered.",
+          });
+        }
+
         if (user.phone !== normalizedPhone) {
           user.isPhoneVerified = false;
         }
+
         user.phone = normalizedPhone;
       } else {
         user.phone = undefined;
@@ -593,31 +777,82 @@ const updateUserProfile = async (req, res) => {
     }
 
     if (avatarUrl !== undefined) {
-      if (typeof avatarUrl !== "string" || avatarUrl.trim().length > 2048 || !isHttpUrlOrEmpty(avatarUrl.trim())) {
-        return res.status(400).json({ message: "Avatar must be a valid HTTP or HTTPS URL." });
+      if (
+        typeof avatarUrl !== "string" ||
+        avatarUrl.trim().length > 2048 ||
+        !isHttpUrlOrEmpty(avatarUrl.trim())
+      ) {
+        return res.status(400).json({
+          message: "Avatar must be a valid HTTP or HTTPS URL.",
+        });
       }
+
       user.avatarUrl = avatarUrl.trim();
     }
 
     if (addresses !== undefined) {
       if (!Array.isArray(addresses) || addresses.length > 5) {
-        return res.status(400).json({ message: "You can save a maximum of 5 addresses." });
+        return res.status(400).json({
+          message: "You can save a maximum of 5 addresses.",
+        });
       }
-      const allowedLabels = ["Home", "Office", "Campus / Hostel", "Other"];
+
+      const allowedLabels = [
+        "Home",
+        "Office",
+        "Campus / Hostel",
+        "Other",
+      ];
+
       const normalizedAddresses = [];
+
       for (const item of addresses) {
-        if (!isPlainObject(item) || !allowedLabels.includes(item.label || "Home")) {
-          return res.status(400).json({ message: "Each address must be a valid address object with a supported label." });
+        if (
+          !isPlainObject(item) ||
+          !allowedLabels.includes(item.label || "Home")
+        ) {
+          return res.status(400).json({
+            message:
+              "Each address must be a valid address object with a supported label.",
+          });
         }
-        const textFields = ["recipientName", "recipientPhone", "division", "district", "area", "streetAddress", "postalCode"];
-        if (textFields.some((field) => item[field] !== undefined && (typeof item[field] !== "string" || item[field].length > (field === "streetAddress" ? 200 : 120)))) {
-          return res.status(400).json({ message: "One or more address fields are invalid or too long." });
+
+        const textFields = [
+          "recipientName",
+          "recipientPhone",
+          "division",
+          "district",
+          "area",
+          "streetAddress",
+          "postalCode",
+        ];
+
+        if (
+          textFields.some(
+            (field) =>
+              item[field] !== undefined &&
+              (
+                typeof item[field] !== "string" ||
+                item[field].length >
+                  (field === "streetAddress" ? 200 : 120)
+              )
+          )
+        ) {
+          return res.status(400).json({
+            message:
+              "One or more address fields are invalid or too long.",
+          });
         }
+
         normalizedAddresses.push({
-          ...(item._id && mongoose.isValidObjectId(item._id) ? { _id: item._id } : {}),
+          ...(item._id && mongoose.isValidObjectId(item._id)
+            ? { _id: item._id }
+            : {}),
           label: item.label || "Home",
           recipientName: (item.recipientName || "").trim(),
-          recipientPhone: normalizeBdPhone(item.recipientPhone || ""),
+          recipientPhone: normalizeBdPhone(
+            item.recipientPhone || ""
+          ),
           division: (item.division || "").trim(),
           district: (item.district || "").trim(),
           area: (item.area || "").trim(),
@@ -626,20 +861,52 @@ const updateUserProfile = async (req, res) => {
           isDefaultShipping: Boolean(item.isDefaultShipping),
           isDefaultBilling: Boolean(item.isDefaultBilling),
         });
-        const normalized = normalizedAddresses[normalizedAddresses.length - 1];
-        if (normalized.recipientPhone && !isValidBdPhone(normalized.recipientPhone)) {
-          return res.status(400).json({ message: "An address contains an invalid Bangladesh phone number." });
+
+        const normalized =
+          normalizedAddresses[normalizedAddresses.length - 1];
+
+        if (
+          normalized.recipientPhone &&
+          !isValidBdPhone(normalized.recipientPhone)
+        ) {
+          return res.status(400).json({
+            message:
+              "An address contains an invalid Bangladesh phone number.",
+          });
         }
       }
-      if (normalizedAddresses.filter((item) => item.isDefaultShipping).length > 1 ||
-        normalizedAddresses.filter((item) => item.isDefaultBilling).length > 1) {
-        return res.status(400).json({ message: "Only one default shipping and one default billing address are allowed." });
+
+      if (
+        normalizedAddresses.filter(
+          (item) => item.isDefaultShipping
+        ).length > 1 ||
+        normalizedAddresses.filter(
+          (item) => item.isDefaultBilling
+        ).length > 1
+      ) {
+        return res.status(400).json({
+          message:
+            "Only one default shipping and one default billing address are allowed.",
+        });
       }
+
       user.addresses = normalizedAddresses;
-      const defaultAddress = normalizedAddresses.find((item) => item.isDefaultShipping) || normalizedAddresses[0];
+
+      const defaultAddress =
+        normalizedAddresses.find(
+          (item) => item.isDefaultShipping
+        ) || normalizedAddresses[0];
+
       if (defaultAddress) {
-        user.address = [defaultAddress.streetAddress, defaultAddress.area, defaultAddress.district, defaultAddress.division, defaultAddress.postalCode]
-          .filter(Boolean).join(", ");
+        user.address = [
+          defaultAddress.streetAddress,
+          defaultAddress.area,
+          defaultAddress.district,
+          defaultAddress.division,
+          defaultAddress.postalCode,
+        ]
+          .filter(Boolean)
+          .join(", ");
       } else {
         user.address = "";
       }
@@ -647,44 +914,112 @@ const updateUserProfile = async (req, res) => {
 
     if (billingProfile !== undefined) {
       if (!isPlainObject(billingProfile)) {
-        return res.status(400).json({ message: "Billing profile must be an object." });
+        return res.status(400).json({
+          message: "Billing profile must be an object.",
+        });
       }
-      const companyName = billingProfile.companyName ?? user.billingProfile?.companyName ?? "";
-      const binNumber = billingProfile.binNumber ?? user.billingProfile?.binNumber ?? "";
-      if (typeof companyName !== "string" || companyName.trim().length > 120 ||
-        typeof binNumber !== "string" || binNumber.trim().length > 30) {
-        return res.status(400).json({ message: "Billing company name or BIN number is invalid." });
+
+      const companyName =
+        billingProfile.companyName ??
+        user.billingProfile?.companyName ??
+        "";
+
+      const binNumber =
+        billingProfile.binNumber ??
+        user.billingProfile?.binNumber ??
+        "";
+
+      if (
+        typeof companyName !== "string" ||
+        companyName.trim().length > 120 ||
+        typeof binNumber !== "string" ||
+        binNumber.trim().length > 30
+      ) {
+        return res.status(400).json({
+          message: "Billing company name or BIN number is invalid.",
+        });
       }
-      user.billingProfile = { companyName: companyName.trim(), binNumber: binNumber.trim() };
+
+      user.billingProfile = {
+        companyName: companyName.trim(),
+        binNumber: binNumber.trim(),
+      };
     }
 
     if (preferences !== undefined) {
       if (!isPlainObject(preferences)) {
-        return res.status(400).json({ message: "Preferences must be an object." });
+        return res.status(400).json({
+          message: "Preferences must be an object.",
+        });
       }
-      const allowed = ["orderUpdatesSms", "priceDropEmails", "warrantyExpiryReminders"];
-      const nextPreferences = user.preferences?.toObject?.() || user.preferences?.toJSON?.() || {};
+
+      const allowed = [
+        "orderUpdatesSms",
+        "priceDropEmails",
+        "warrantyExpiryReminders",
+      ];
+
+      const nextPreferences =
+        user.preferences?.toObject?.() ||
+        user.preferences?.toJSON?.() ||
+        {};
+
       for (const key of allowed) {
-        if (Object.prototype.hasOwnProperty.call(preferences, key)) {
+        if (
+          Object.prototype.hasOwnProperty.call(
+            preferences,
+            key
+          )
+        ) {
           if (typeof preferences[key] !== "boolean") {
-            return res.status(400).json({ message: `Preference "${key}" must be true or false.` });
+            return res.status(400).json({
+              message: `Preference "${key}" must be true or false.`,
+            });
           }
+
           nextPreferences[key] = preferences[key];
         }
       }
-      if (!allowed.some((key) => Object.prototype.hasOwnProperty.call(preferences, key))) {
-        return res.status(400).json({ message: "No supported preference fields were supplied." });
+
+      if (
+        !allowed.some((key) =>
+          Object.prototype.hasOwnProperty.call(
+            preferences,
+            key
+          )
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "No supported preference fields were supplied.",
+        });
       }
+
       user.preferences = nextPreferences;
     }
 
     if (ownedDevices !== undefined) {
-      if (!Array.isArray(ownedDevices) || ownedDevices.length > 20 ||
-        ownedDevices.some((device) => !isPlainObject(device) ||
-          ["brand", "model", "category"].some((key) => device[key] !== undefined &&
-            (typeof device[key] !== "string" || device[key].trim().length > 100)))) {
-        return res.status(400).json({ message: "Provide up to 20 valid owned-device entries." });
+      if (
+        !Array.isArray(ownedDevices) ||
+        ownedDevices.length > 20 ||
+        ownedDevices.some(
+          (device) =>
+            !isPlainObject(device) ||
+            ["brand", "model", "category"].some(
+              (key) =>
+                device[key] !== undefined &&
+                (
+                  typeof device[key] !== "string" ||
+                  device[key].trim().length > 100
+                )
+            )
+        )
+      ) {
+        return res.status(400).json({
+          message: "Provide up to 20 valid owned-device entries.",
+        });
       }
+
       user.ownedDevices = ownedDevices.map((device) => ({
         brand: (device.brand || "").trim(),
         model: (device.model || "").trim(),
@@ -693,12 +1028,29 @@ const updateUserProfile = async (req, res) => {
     }
 
     await user.save();
-    const updatedUser = await User.findById(user._id).select(SAFE_USER_FIELDS);
-    return res.status(200).json({ message: "Profile updated successfully.", user: updatedUser });
+
+    const updatedUser = await User.findById(user._id)
+      .select(SAFE_USER_FIELDS);
+
+    return res.status(200).json({
+      message: "Profile updated successfully.",
+      user: updatedUser,
+    });
   } catch (error) {
     console.error("Update user profile error:", error);
-    if (error.code === 11000) return res.status(409).json({ message: "This phone number is already registered." });
-    if (error.name === "ValidationError") return res.status(400).json({ message: error.message });
+
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: "This phone number is already registered.",
+      });
+    }
+
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        message: error.message,
+      });
+    }
+
     return sendServerError(res);
   }
 };
@@ -709,19 +1061,56 @@ const updateUserProfile = async (req, res) => {
 
 const addToWishlist = async (req, res) => {
   try {
-    if (req.user.role !== "customer") return res.status(403).json({ message: "Customer access only." });
+    if (req.user.role !== "customer") {
+      return res.status(403).json({
+        message: "Customer access only.",
+      });
+    }
+
     const { productId, variantSku = "" } = req.body;
-    if (!mongoose.isValidObjectId(productId)) return res.status(400).json({ message: "A valid product ID is required." });
-    if (typeof variantSku !== "string" || variantSku.length > 80) return res.status(400).json({ message: "Invalid variant SKU." });
-    if (!(await Product.exists({ _id: productId }))) return res.status(404).json({ message: "Product not found." });
+
+    if (!mongoose.isValidObjectId(productId)) {
+      return res.status(400).json({
+        message: "A valid product ID is required.",
+      });
+    }
+
+    if (
+      typeof variantSku !== "string" ||
+      variantSku.length > 80
+    ) {
+      return res.status(400).json({
+        message: "Invalid variant SKU.",
+      });
+    }
+
+    if (!(await Product.exists({ _id: productId }))) {
+      return res.status(404).json({
+        message: "Product not found.",
+      });
+    }
 
     const user = await User.findById(req.user._id);
-    const exists = user.wishlist.some((item) =>
-      item.productId.toString() === productId && item.variantSku === variantSku.trim().toUpperCase()
+
+    const exists = user.wishlist.some(
+      (item) =>
+        item.productId.toString() === productId &&
+        item.variantSku === variantSku.trim().toUpperCase()
     );
-    if (!exists) user.wishlist.push({ productId, variantSku: variantSku.trim().toUpperCase() });
+
+    if (!exists) {
+      user.wishlist.push({
+        productId,
+        variantSku: variantSku.trim().toUpperCase(),
+      });
+    }
+
     await user.save();
-    return res.status(200).json({ message: "Wishlist updated.", wishlist: user.wishlist });
+
+    return res.status(200).json({
+      message: "Wishlist updated.",
+      wishlist: user.wishlist,
+    });
   } catch (error) {
     console.error("Add wishlist item error:", error);
     return sendServerError(res);
@@ -730,12 +1119,31 @@ const addToWishlist = async (req, res) => {
 
 const removeFromWishlist = async (req, res) => {
   try {
-    if (req.user.role !== "customer") return res.status(403).json({ message: "Customer access only." });
-    if (!mongoose.isValidObjectId(req.params.productId)) return res.status(400).json({ message: "Invalid product ID." });
+    if (req.user.role !== "customer") {
+      return res.status(403).json({
+        message: "Customer access only.",
+      });
+    }
+
+    if (!mongoose.isValidObjectId(req.params.productId)) {
+      return res.status(400).json({
+        message: "Invalid product ID.",
+      });
+    }
+
     const user = await User.findById(req.user._id);
-    user.wishlist = user.wishlist.filter((item) => item.productId.toString() !== req.params.productId);
+
+    user.wishlist = user.wishlist.filter(
+      (item) =>
+        item.productId.toString() !== req.params.productId
+    );
+
     await user.save();
-    return res.status(200).json({ message: "Wishlist item removed.", wishlist: user.wishlist });
+
+    return res.status(200).json({
+      message: "Wishlist item removed.",
+      wishlist: user.wishlist,
+    });
   } catch (error) {
     console.error("Remove wishlist item error:", error);
     return sendServerError(res);
@@ -744,28 +1152,77 @@ const removeFromWishlist = async (req, res) => {
 
 const addPriceAlert = async (req, res) => {
   try {
-    if (req.user.role !== "customer") return res.status(403).json({ message: "Customer access only." });
-    const { productId, variantSku = "", targetPrice, notifyOnRestock = true } = req.body;
-    const price = Number(targetPrice);
-    if (targetPrice === undefined || targetPrice === null || targetPrice === "" || !mongoose.isValidObjectId(productId) || !Number.isFinite(price) || price < 0 ||
-      typeof variantSku !== "string" || variantSku.length > 80 || typeof notifyOnRestock !== "boolean") {
-      return res.status(400).json({ message: "Provide a valid product, variant SKU, target price and restock preference." });
+    if (req.user.role !== "customer") {
+      return res.status(403).json({
+        message: "Customer access only.",
+      });
     }
-    if (!(await Product.exists({ _id: productId }))) return res.status(404).json({ message: "Product not found." });
+
+    const {
+      productId,
+      variantSku = "",
+      targetPrice,
+      notifyOnRestock = true,
+    } = req.body;
+
+    const price = Number(targetPrice);
+
+    if (
+      targetPrice === undefined ||
+      targetPrice === null ||
+      targetPrice === "" ||
+      !mongoose.isValidObjectId(productId) ||
+      !Number.isFinite(price) ||
+      price < 0 ||
+      typeof variantSku !== "string" ||
+      variantSku.length > 80 ||
+      typeof notifyOnRestock !== "boolean"
+    ) {
+      return res.status(400).json({
+        message:
+          "Provide a valid product, variant SKU, target price and restock preference.",
+      });
+    }
+
+    if (!(await Product.exists({ _id: productId }))) {
+      return res.status(404).json({
+        message: "Product not found.",
+      });
+    }
+
     const user = await User.findById(req.user._id);
     const sku = variantSku.trim().toUpperCase();
-    const existing = user.priceAlerts.find((item) => item.productId.toString() === productId && item.variantSku === sku);
+
+    const existing = user.priceAlerts.find(
+      (item) =>
+        item.productId.toString() === productId &&
+        item.variantSku === sku
+    );
+
     if (user.priceAlerts.length >= 20 && !existing) {
-      return res.status(400).json({ message: "You can save a maximum of 20 price alerts." });
+      return res.status(400).json({
+        message: "You can save a maximum of 20 price alerts.",
+      });
     }
+
     if (existing) {
       existing.targetPrice = price;
       existing.notifyOnRestock = notifyOnRestock;
     } else {
-      user.priceAlerts.push({ productId, variantSku: sku, targetPrice: price, notifyOnRestock });
+      user.priceAlerts.push({
+        productId,
+        variantSku: sku,
+        targetPrice: price,
+        notifyOnRestock,
+      });
     }
+
     await user.save();
-    return res.status(200).json({ message: "Price alert saved.", priceAlerts: user.priceAlerts });
+
+    return res.status(200).json({
+      message: "Price alert saved.",
+      priceAlerts: user.priceAlerts,
+    });
   } catch (error) {
     console.error("Save price alert error:", error);
     return sendServerError(res);
@@ -774,12 +1231,31 @@ const addPriceAlert = async (req, res) => {
 
 const removePriceAlert = async (req, res) => {
   try {
-    if (req.user.role !== "customer") return res.status(403).json({ message: "Customer access only." });
-    if (!mongoose.isValidObjectId(req.params.productId)) return res.status(400).json({ message: "Invalid product ID." });
+    if (req.user.role !== "customer") {
+      return res.status(403).json({
+        message: "Customer access only.",
+      });
+    }
+
+    if (!mongoose.isValidObjectId(req.params.productId)) {
+      return res.status(400).json({
+        message: "Invalid product ID.",
+      });
+    }
+
     const user = await User.findById(req.user._id);
-    user.priceAlerts = user.priceAlerts.filter((item) => item.productId.toString() !== req.params.productId);
+
+    user.priceAlerts = user.priceAlerts.filter(
+      (item) =>
+        item.productId.toString() !== req.params.productId
+    );
+
     await user.save();
-    return res.status(200).json({ message: "Price alert removed.", priceAlerts: user.priceAlerts });
+
+    return res.status(200).json({
+      message: "Price alert removed.",
+      priceAlerts: user.priceAlerts,
+    });
   } catch (error) {
     console.error("Remove price alert error:", error);
     return sendServerError(res);
@@ -788,23 +1264,51 @@ const removePriceAlert = async (req, res) => {
 
 const addRecentlyViewed = async (req, res) => {
   try {
-    if (req.user.role !== "customer") return res.status(403).json({ message: "Customer access only." });
+    if (req.user.role !== "customer") {
+      return res.status(403).json({
+        message: "Customer access only.",
+      });
+    }
+
     const { productId } = req.body;
-    if (!mongoose.isValidObjectId(productId)) return res.status(400).json({ message: "A valid product ID is required." });
-    if (!(await Product.exists({ _id: productId }))) return res.status(404).json({ message: "Product not found." });
+
+    if (!mongoose.isValidObjectId(productId)) {
+      return res.status(400).json({
+        message: "A valid product ID is required.",
+      });
+    }
+
+    if (!(await Product.exists({ _id: productId }))) {
+      return res.status(404).json({
+        message: "Product not found.",
+      });
+    }
+
     const user = await User.findById(req.user._id);
-    user.recentlyViewed = user.recentlyViewed.filter((id) => id.toString() !== productId);
+
+    user.recentlyViewed = user.recentlyViewed.filter(
+      (id) => id.toString() !== productId
+    );
+
     user.recentlyViewed.push(productId);
     user.recentlyViewed = user.recentlyViewed.slice(-12);
+
     await user.save();
-    return res.status(200).json({ message: "Recently viewed list updated.", recentlyViewed: user.recentlyViewed });
+
+    return res.status(200).json({
+      message: "Recently viewed list updated.",
+      recentlyViewed: user.recentlyViewed,
+    });
   } catch (error) {
     console.error("Recently viewed update error:", error);
     return sendServerError(res);
   }
 };
 
+// ======================================================
 // DELETE USER PROFILE
+// ======================================================
+
 const deleteUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -829,7 +1333,9 @@ const deleteUserProfile = async (req, res) => {
   }
 };
 
+// ======================================================
 // GET SELLER PROFILE
+// ======================================================
 
 const getSellerProfile = async (req, res) => {
   try {
@@ -898,7 +1404,9 @@ const updateSellerProfile = async (req, res) => {
     const updates = {};
 
     for (const field of allowedFields) {
-      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+      if (
+        Object.prototype.hasOwnProperty.call(req.body, field)
+      ) {
         updates[field] = req.body[field];
       }
     }
@@ -1042,7 +1550,8 @@ const updateSellerProfile = async (req, res) => {
         });
       }
 
-      updates.supportEmail = updates.supportEmail.trim().toLowerCase();
+      updates.supportEmail =
+        updates.supportEmail.trim().toLowerCase();
     }
 
     // Public address validation.
@@ -1312,11 +1821,11 @@ const getSellerApplicationStatus = async (req, res) => {
 
     const application = user.sellerApplication
       ? {
-        reason: user.sellerApplication.reason,
-        submittedAt: user.sellerApplication.submittedAt,
-        reviewedAt: user.sellerApplication.reviewedAt,
-        reviewNote: user.sellerApplication.reviewNote,
-      }
+          reason: user.sellerApplication.reason,
+          submittedAt: user.sellerApplication.submittedAt,
+          reviewedAt: user.sellerApplication.reviewedAt,
+          reviewNote: user.sellerApplication.reviewNote,
+        }
       : null;
 
     return res.status(200).json({

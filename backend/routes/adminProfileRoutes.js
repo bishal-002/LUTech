@@ -10,6 +10,10 @@ const {
 } = require("../controllers/adminProfileController");
 
 const {
+  updateAdminSecuritySettings,
+} = require("../controllers/adminSecurityController");
+
+const {
   protect,
   adminOnly,
 } = require("../middleware/authMiddleware");
@@ -20,11 +24,11 @@ const {
 
 const router = express.Router();
 
-// Every endpoint in this router requires:
-// 1. A valid login
-// 2. The general admin user role
-// 3. An active AdminProfile
-// 4. The manage_admins permission
+// Every endpoint requires:
+// 1. A valid login.
+// 2. The general admin user role.
+// 3. An active AdminProfile.
+// 4. The manage_admins permission.
 
 router.use(
   protect,
@@ -45,6 +49,15 @@ router.post("/", createAdminProfile);
 router.patch("/:id", updateAdminProfile);
 
 // PATCH /api/admin/profiles/:id/status
-router.patch("/:id/status", updateAdminProfileStatus);
+router.patch(
+  "/:id/status",
+  updateAdminProfileStatus
+);
+
+// PATCH /api/admin/profiles/:id/security
+router.patch(
+  "/:id/security",
+  updateAdminSecuritySettings
+);
 
 module.exports = router;

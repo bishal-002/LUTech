@@ -12,6 +12,7 @@ const {
 
 const adminSecuritySchema = new mongoose.Schema(
   {
+    // Two-factor authentication status.
     twoFactorEnabled: {
       type: Boolean,
       default: false,
@@ -23,14 +24,126 @@ const adminSecuritySchema = new mongoose.Schema(
       default: undefined,
     },
 
-    // Store only encrypted authenticator secrets.
-    // Encryption/decryption will be implemented separately.
+    // Encrypted active authenticator secret.
     twoFactorSecretEncrypted: {
       type: String,
       default: undefined,
       select: false,
     },
 
+    // Pending enrollment.
+    twoFactorPendingMethod: {
+      type: String,
+      enum: ["authenticator_app", "email_otp"],
+      default: undefined,
+      select: false,
+    },
+
+    twoFactorPendingSecretEncrypted: {
+      type: String,
+      default: undefined,
+      select: false,
+    },
+
+    twoFactorSetupExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    twoFactorSetupOtpHash: {
+      type: String,
+      default: undefined,
+      select: false,
+    },
+
+    twoFactorSetupOtpAttempts: {
+      type: Number,
+      default: 0,
+      min: 0,
+      select: false,
+    },
+
+    // One-time login challenge.
+    twoFactorChallengeId: {
+      type: String,
+      default: undefined,
+      select: false,
+    },
+
+    twoFactorChallengeExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    twoFactorChallengeAttempts: {
+      type: Number,
+      default: 0,
+      min: 0,
+      select: false,
+    },
+
+    // Email OTP used during administrator login.
+    twoFactorLoginOtpHash: {
+      type: String,
+      default: undefined,
+      select: false,
+    },
+
+    twoFactorLoginOtpExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    twoFactorLoginOtpAttempts: {
+      type: Number,
+      default: 0,
+      min: 0,
+      select: false,
+    },
+
+    twoFactorLoginOtpSentAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    twoFactorLoginOtpSendCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      select: false,
+    },
+
+    twoFactorLoginOtpWindowStart: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    // Email OTP used when disabling email-based 2FA.
+    twoFactorDisableOtpHash: {
+      type: String,
+      default: undefined,
+      select: false,
+    },
+
+    twoFactorDisableOtpExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    twoFactorDisableOtpAttempts: {
+      type: Number,
+      default: 0,
+      min: 0,
+      select: false,
+    },
+
+    // IP whitelist.
     allowedIps: {
       type: [
         {
@@ -40,13 +153,20 @@ const adminSecuritySchema = new mongoose.Schema(
         },
       ],
       default: [],
+      validate: {
+        validator: (items) =>
+          Array.isArray(items) && items.length <= 20,
+        message: "A maximum of 20 allowed IP rules is permitted.",
+      },
     },
 
+    // Password/session security.
     passwordChangedAt: {
       type: Date,
       default: Date.now,
     },
 
+    // Last successful administrator login metadata.
     lastLoginIp: {
       type: String,
       trim: true,
@@ -101,8 +221,6 @@ const adminMetricsSchema = new mongoose.Schema(
 
 const adminProfileSchema = new mongoose.Schema(
   {
-    // Link to the existing User document.
-    // Do not duplicate login credentials here.
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -191,6 +309,16 @@ adminProfileSchema.pre("validate", function () {
     this.invalidate(
       "security.twoFactorSecretEncrypted",
       "An encrypted authenticator secret is required."
+    );
+  }
+
+  if (
+    security.twoFactorEnabled &&
+    security.twoFactorPendingMethod
+  ) {
+    this.invalidate(
+      "security.twoFactorPendingMethod",
+      "A pending enrollment cannot exist while 2FA is enabled."
     );
   }
 });
