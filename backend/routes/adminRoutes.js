@@ -1,4 +1,3 @@
-
 const express = require("express");
 
 const {
@@ -7,9 +6,12 @@ const {
   updateUserRole,
   deleteUser,
   getSellerApplications,
-  approveSeller,
   rejectSeller,
 } = require("../controllers/adminController");
+
+const {
+  approveSeller,
+} = require("../controllers/sellerApprovalController");
 
 const {
   getAllOrders,

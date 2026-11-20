@@ -1,4 +1,3 @@
-
 const jwt = require("jsonwebtoken");
 
 const User = require("../models/User");
@@ -7,6 +6,11 @@ const AdminProfile = require("../models/AdminProfile");
 const {
   isIpAllowed,
 } = require("../services/adminSecurityService");
+
+const {
+  isAdminPasswordExpired,
+  getAdminPasswordMaxAgeDays,
+} = require("../services/adminPolicyService");
 
 // ======================================================
 // AUTHENTICATION MIDDLEWARE
@@ -159,12 +163,37 @@ const protect = async (req, res, next) => {
       if (
         passwordChangedAt &&
         Number(decoded.iat || 0) <
-          Math.floor(passwordChangedAt.getTime() / 1000)
+          Math.floor(
+            new Date(passwordChangedAt).getTime() / 1000
+          )
       ) {
         return res.status(401).json({
           message:
             "Your administrator password has changed. Please log in again.",
           code: "ADMIN_SESSION_INVALIDATED",
+        });
+      }
+
+      // Only the existing password-change endpoint is exempt
+      // from the password-expiry restriction.
+      const normalizedUrl = String(
+        req.originalUrl || ""
+      ).split("?")[0];
+
+      const isPasswordChangeRequest =
+        req.method === "PATCH" &&
+        normalizedUrl.endsWith("/admin/security/password");
+
+      if (
+        !isPasswordChangeRequest &&
+        isAdminPasswordExpired(passwordChangedAt)
+      ) {
+        return res.status(403).json({
+          message:
+            "Your administrator password has expired. Change your password to continue.",
+          code: "ADMIN_PASSWORD_EXPIRED",
+          passwordMaxAgeDays:
+            getAdminPasswordMaxAgeDays(),
         });
       }
 
@@ -217,6 +246,7 @@ const protect = async (req, res, next) => {
       }
 
       req.adminProfile = adminProfile;
+
       req.authMethods = Array.isArray(decoded.amr)
         ? decoded.amr
         : [];

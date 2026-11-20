@@ -1,4 +1,3 @@
-
 const express = require("express");
 
 const {
@@ -22,6 +21,10 @@ const {
   requireAdminPermission,
 } = require("../middleware/adminPermissionMiddleware");
 
+const validateAdminTargetEmail = require(
+  "../middleware/validateAdminTargetEmail"
+);
+
 const router = express.Router();
 
 // Every endpoint requires:
@@ -43,7 +46,11 @@ router.get("/", getAdminProfiles);
 router.get("/:id", getAdminProfileById);
 
 // POST /api/admin/profiles
-router.post("/", createAdminProfile);
+router.post(
+  "/",
+  validateAdminTargetEmail,
+  createAdminProfile
+);
 
 // PATCH /api/admin/profiles/:id
 router.patch("/:id", updateAdminProfile);

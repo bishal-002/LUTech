@@ -1,4 +1,3 @@
-
 const express = require("express");
 
 const {
@@ -23,6 +22,10 @@ const {
   protect,
 } = require("../middleware/authMiddleware");
 
+const adminLoginAlertMiddleware = require(
+  "../middleware/adminLoginAlertMiddleware"
+);
+
 const router = express.Router();
 
 // ======================================================
@@ -31,7 +34,11 @@ const router = express.Router();
 
 router.post("/register", registerUser);
 
-router.post("/login", loginUser);
+router.post(
+  "/login",
+  adminLoginAlertMiddleware,
+  loginUser
+);
 
 router.post("/verify-otp", verifyOTP);
 
@@ -41,6 +48,7 @@ router.post("/resend-otp", resendOTP);
 // the user does not have an access token yet.
 router.post(
   "/admin-2fa/verify",
+  adminLoginAlertMiddleware,
   verifyAdminLoginTwoFactor
 );
 

@@ -16,11 +16,27 @@ const {
 } = require("../controllers/catalogController");
 
 const {
+  getSellerMasterBrands,
+} = require("../controllers/sellerCatalogController");
+
+const {
   protect,
   adminOnly,
+  sellerOnly,
 } = require("../middleware/authMiddleware");
 
 const router = express.Router();
+
+// ======================================================
+// SELLER MASTER BRAND ROUTE
+// ======================================================
+
+router.get(
+  "/seller/master-brands",
+  protect,
+  sellerOnly,
+  getSellerMasterBrands
+);
 
 // ======================================================
 // PUBLIC BRAND ROUTES
@@ -45,12 +61,46 @@ router.use("/admin", protect, adminOnly);
 router.get("/admin/brands", getAllBrandsAdmin);
 router.get("/admin/categories", getAllCategoriesAdmin);
 
-router.post("/brands", protect, adminOnly, createBrand);
-router.put("/brands/:id", protect, adminOnly, updateBrand);
-router.delete("/brands/:id", protect, adminOnly, deactivateBrand);
+router.post(
+  "/brands",
+  protect,
+  adminOnly,
+  createBrand
+);
 
-router.post("/categories", protect, adminOnly, createCategory);
-router.put("/categories/:id", protect, adminOnly, updateCategory);
-router.delete("/categories/:id", protect, adminOnly, deactivateCategory);
+router.put(
+  "/brands/:id",
+  protect,
+  adminOnly,
+  updateBrand
+);
+
+router.delete(
+  "/brands/:id",
+  protect,
+  adminOnly,
+  deactivateBrand
+);
+
+router.post(
+  "/categories",
+  protect,
+  adminOnly,
+  createCategory
+);
+
+router.put(
+  "/categories/:id",
+  protect,
+  adminOnly,
+  updateCategory
+);
+
+router.delete(
+  "/categories/:id",
+  protect,
+  adminOnly,
+  deactivateCategory
+);
 
 module.exports = router;

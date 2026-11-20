@@ -1,14 +1,16 @@
-
 const express = require("express");
 
 const {
-  createProduct,
   getProducts,
   getProductById,
   updateProduct,
   deleteProduct,
   getMyProducts,
 } = require("../controllers/productController");
+
+const {
+  createProduct,
+} = require("../controllers/productCreationController");
 
 const {
   protect,

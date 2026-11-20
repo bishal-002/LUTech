@@ -16,18 +16,23 @@ const platformSettingsSchema = new mongoose.Schema(
       immutable: true,
     },
 
-    // Default platform commission percentage.
-    commissionRate: {
+    // Canonical default platform commission percentage.
+    // commissionRate remains a Mongoose alias for compatibility
+    // with the existing platform settings controller.
+    defaultCommissionRate: {
       type: Number,
+      alias: "commissionRate",
       default: 5,
       min: 0,
       max: 100,
       validate: {
         validator: (value) =>
           Number.isFinite(value) &&
-          Math.abs(value * 100 - Math.round(value * 100)) < 1e-8,
+          Math.abs(
+            value * 100 - Math.round(value * 100)
+          ) < 1e-8,
         message:
-          "Commission rate can have a maximum of two decimal places.",
+          "Default commission rate can have a maximum of two decimal places.",
       },
     },
 
@@ -45,7 +50,8 @@ const platformSettingsSchema = new mongoose.Schema(
       min: 1,
       validate: {
         validator: Number.isSafeInteger,
-        message: "COD maximum order amount must be a positive whole number.",
+        message:
+          "COD maximum order amount must be a positive whole number.",
       },
     },
 
@@ -88,8 +94,9 @@ const platformSettingsSchema = new mongoose.Schema(
         validator: (brands) =>
           Array.isArray(brands) &&
           brands.length <= 500 &&
-          new Set(brands.map((brand) => brand.toString())).size ===
-            brands.length,
+          new Set(
+            brands.map((brand) => brand.toString())
+          ).size === brands.length,
         message:
           "Master brands must contain unique Brand IDs, with a maximum of 500.",
       },
@@ -123,4 +130,7 @@ platformSettingsSchema.index(
 
 module.exports =
   mongoose.models.PlatformSettings ||
-  mongoose.model("PlatformSettings", platformSettingsSchema);
+  mongoose.model(
+    "PlatformSettings",
+    platformSettingsSchema
+  );

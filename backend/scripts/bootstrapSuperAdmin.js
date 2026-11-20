@@ -1,4 +1,3 @@
-
 const path = require("path");
 const dns = require("dns");
 
@@ -20,6 +19,10 @@ const {
   getDefaultPermissions,
 } = require("../config/adminPermissions");
 
+const {
+  isAllowedAdminEmail,
+} = require("../services/adminPolicyService");
+
 // ======================================================
 // BOOTSTRAP FIRST SUPER ADMIN
 // ======================================================
@@ -29,9 +32,18 @@ const bootstrapSuperAdmin = async () => {
     .trim()
     .toLowerCase();
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (
+    !email ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  ) {
     throw new Error(
       "Usage: node scripts/bootstrapSuperAdmin.js <admin-email>"
+    );
+  }
+
+  if (!isAllowedAdminEmail(email)) {
+    throw new Error(
+      "The Super Admin email must belong to an authorized official email domain."
     );
   }
 
@@ -40,7 +52,8 @@ const bootstrapSuperAdmin = async () => {
     await connectDB();
 
     // Only allow this script to run before any AdminProfile exists.
-    const existingProfiles = await AdminProfile.estimatedDocumentCount();
+    const existingProfiles =
+      await AdminProfile.estimatedDocumentCount();
 
     if (existingProfiles > 0) {
       throw new Error(
@@ -54,7 +67,9 @@ const bootstrapSuperAdmin = async () => {
     );
 
     if (!user) {
-      throw new Error("No user account found with that email address.");
+      throw new Error(
+        "No user account found with that email address."
+      );
     }
 
     if (user.role !== "admin") {
@@ -75,8 +90,15 @@ const bootstrapSuperAdmin = async () => {
       );
     }
 
+    if (!isAllowedAdminEmail(user.email)) {
+      throw new Error(
+        "The Super Admin email must belong to an authorized official email domain."
+      );
+    }
+
     // Create the initial Super Admin profile.
-    const permissions = getDefaultPermissions("super_admin");
+    const permissions =
+      getDefaultPermissions("super_admin");
 
     const adminProfile = await AdminProfile.create({
       userId: user._id,
@@ -98,11 +120,20 @@ const bootstrapSuperAdmin = async () => {
     console.log("Name:", user.name);
     console.log("Email:", user.email);
     console.log("User ID:", user._id.toString());
-    console.log("Admin Profile ID:", adminProfile._id.toString());
+    console.log(
+      "Admin Profile ID:",
+      adminProfile._id.toString()
+    );
     console.log("Admin Role:", adminProfile.adminRole);
-    console.log("Permissions:", adminProfile.permissions.length);
+    console.log(
+      "Permissions:",
+      adminProfile.permissions.length
+    );
     console.log("Status:", adminProfile.status);
-    console.log("2FA Enabled:", adminProfile.security.twoFactorEnabled);
+    console.log(
+      "2FA Enabled:",
+      adminProfile.security.twoFactorEnabled
+    );
     console.log("====================================\n");
 
     console.log(
