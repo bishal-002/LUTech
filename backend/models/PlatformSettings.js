@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 
 // ======================================================
@@ -17,8 +18,7 @@ const platformSettingsSchema = new mongoose.Schema(
     },
 
     // Canonical default platform commission percentage.
-    // commissionRate remains a Mongoose alias for compatibility
-    // with the existing platform settings controller.
+    // commissionRate remains a Mongoose alias for compatibility.
     defaultCommissionRate: {
       type: Number,
       alias: "commissionRate",
@@ -36,14 +36,12 @@ const platformSettingsSchema = new mongoose.Schema(
       },
     },
 
-    // Product moderation default.
     autoApproveProducts: {
       type: Boolean,
       default: false,
     },
 
-    // Maximum order amount permitted for Cash on Delivery.
-    // Amounts are stored in BDT.
+    // Maximum COD order amount in BDT.
     codMaxOrderAmount: {
       type: Number,
       default: 50000,
@@ -55,7 +53,6 @@ const platformSettingsSchema = new mongoose.Schema(
       },
     },
 
-    // Maximum refused COD deliveries before applying restrictions.
     maxRefusedCodAllowed: {
       type: Number,
       default: 2,
@@ -68,7 +65,6 @@ const platformSettingsSchema = new mongoose.Schema(
       },
     },
 
-    // Payout hold period in days.
     payoutHoldDays: {
       type: Number,
       default: 7,
@@ -81,7 +77,6 @@ const platformSettingsSchema = new mongoose.Schema(
       },
     },
 
-    // Curated list of active Brand documents.
     masterBrands: {
       type: [
         {
@@ -102,7 +97,6 @@ const platformSettingsSchema = new mongoose.Schema(
       },
     },
 
-    // Last administrator who changed the global settings.
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -115,14 +109,8 @@ const platformSettingsSchema = new mongoose.Schema(
   }
 );
 
-// ======================================================
-// INDEXES
-// ======================================================
-
-platformSettingsSchema.index(
-  { settingKey: 1 },
-  { unique: true }
-);
+// settingKey already has unique: true.
+// Mongoose creates its index automatically.
 
 // ======================================================
 // EXPORT
@@ -130,7 +118,4 @@ platformSettingsSchema.index(
 
 module.exports =
   mongoose.models.PlatformSettings ||
-  mongoose.model(
-    "PlatformSettings",
-    platformSettingsSchema
-  );
+  mongoose.model("PlatformSettings", platformSettingsSchema);

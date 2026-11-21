@@ -1,8 +1,15 @@
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import { Link } from "react-router-dom";
 
 import { getProducts } from "../../services/productService";
+
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import Loader from "../../components/Loader";
@@ -15,40 +22,102 @@ function Products() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // ======================================================
+  // FETCH PRODUCTS
+  // ======================================================
+
   const fetchProducts = useCallback(async () => {
     try {
+      setLoading(true);
       setError("");
-      const data = await getProducts();
-      setProducts(data);
-    } catch {
-      setError("Failed to load products. Please try again later.");
+
+      const response = await getProducts();
+
+      // Backend returns:
+      // {
+      //   success: true,
+      //   count: 3,
+      //   total: 3,
+      //   products: [...]
+      // }
+      //
+      // Also support an array response for compatibility.
+
+      const productList = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.products)
+          ? response.products
+          : [];
+
+      setProducts(productList);
+    } catch (err) {
+      console.error("Failed to load products:", err);
+
+      setError(
+        err.response?.data?.message ||
+          "Failed to load products. Please try again later."
+      );
+
+      setProducts([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // ======================================================
+  // INITIAL PRODUCT LOADING
+  // ======================================================
+
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
 
-  const filteredProducts = useMemo(() => {
-    const query = searchTerm.toLowerCase();
+  // ======================================================
+  // SEARCH FILTER
+  // ======================================================
 
-    if (!query) return products;
+  const filteredProducts = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    if (!query) {
+      return products;
+    }
 
     return products.filter((product) => {
-      const name = product.name?.toLowerCase() || "";
-      const description = product.description?.toLowerCase() || "";
+      const name = (
+        product.name ||
+        product.title ||
+        ""
+      ).toLowerCase();
 
-      return name.includes(query) || description.includes(query);
+      const description = (
+        product.description || ""
+      ).toLowerCase();
+
+      const brand =
+        typeof product.brandId === "object"
+          ? product.brandId?.name || ""
+          : "";
+
+      return (
+        name.includes(query) ||
+        description.includes(query) ||
+        brand.toLowerCase().includes(query)
+      );
     });
   }, [products, searchTerm]);
+
+  // ======================================================
+  // PAGE
+  // ======================================================
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F4F6F4]">
       <Navbar />
 
       <main className="page-container flex-1 py-7 sm:py-9">
+
+        {/* PAGE HEADER */}
         <div className="mb-7">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#B9533B]">
             Explore Our Collection
@@ -64,6 +133,7 @@ function Products() {
           </p>
         </div>
 
+        {/* SEARCH SECTION */}
         <section className="mb-7 rounded-xl border border-[#E5E9E5] bg-white p-3 shadow-sm sm:p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="shrink-0">
@@ -85,11 +155,14 @@ function Products() {
           </div>
         </section>
 
+        {/* LOADING STATE */}
         {loading ? (
           <div className="rounded-xl border border-[#E5E9E5] bg-white p-6">
             <Loader message="Loading products..." />
           </div>
         ) : error ? (
+
+          /* ERROR STATE */
           <div
             role="alert"
             className="rounded-xl border border-red-200 bg-red-50 p-5"
@@ -98,20 +171,21 @@ function Products() {
               Unable to load products
             </h2>
 
-            <p className="mt-2 text-sm text-red-700">{error}</p>
+            <p className="mt-2 text-sm text-red-700">
+              {error}
+            </p>
 
             <button
               type="button"
-              onClick={() => {
-                setLoading(true);
-                fetchProducts();
-              }}
+              onClick={fetchProducts}
               className="mt-4 rounded-lg bg-[#1A2E26] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#294438]"
             >
               Try Again
             </button>
           </div>
         ) : products.length === 0 ? (
+
+          /* EMPTY PRODUCT STATE */
           <div className="rounded-xl border border-dashed border-[#D5DED7] bg-white px-5 py-12 text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#EBF0EB] text-xl text-[#1A2E26]">
               ♡
@@ -133,6 +207,8 @@ function Products() {
             </Link>
           </div>
         ) : (
+
+          /* PRODUCT LIST */
           <>
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -141,7 +217,8 @@ function Products() {
                 </h2>
 
                 <p className="mt-1 text-xs text-[#68766F] sm:text-sm">
-                  Showing {filteredProducts.length} of {products.length}{" "}
+                  Showing {filteredProducts.length} of{" "}
+                  {products.length}{" "}
                   {products.length === 1 ? "product" : "products"}
                 </p>
               </div>
@@ -157,6 +234,7 @@ function Products() {
               )}
             </div>
 
+            {/* NO SEARCH RESULTS */}
             {filteredProducts.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[#D5DED7] bg-white px-5 py-12 text-center">
                 <h2 className="text-lg font-bold text-[#20332B]">
@@ -176,9 +254,14 @@ function Products() {
                 </button>
               </div>
             ) : (
+
+              /* PRODUCT GRID */
               <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 sm:gap-5">
                 {filteredProducts.map((product) => (
-                  <ProductCard key={product._id} product={product} />
+                  <ProductCard
+                    key={product._id}
+                    product={product}
+                  />
                 ))}
               </div>
             )}
