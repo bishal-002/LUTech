@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const {
@@ -26,14 +25,19 @@ const handleError = (res, error, fallbackMessage) => {
 };
 
 // ======================================================
-// ADMIN POPULATION
+// POPULATE AUDIT ACTORS
 // ======================================================
 
-const populateAuditAdmin = (query) => {
-  return query.populate({
-    path: "adminId",
-    select: "name email role",
-  });
+const populateAuditActors = (query) => {
+  return query
+    .populate({
+      path: "adminId",
+      select: "name email role",
+    })
+    .populate({
+      path: "actorId",
+      select: "name email role storeName",
+    });
 };
 
 // ======================================================
@@ -58,10 +62,6 @@ const getAuditLogs = async (req, res) => {
 
     const filter = {};
 
-    // ----------------------------------------------
-    // Filter by action
-    // ----------------------------------------------
-
     if (req.query.action) {
       if (!AUDIT_ACTIONS.includes(req.query.action)) {
         return res.status(400).json({
@@ -71,10 +71,6 @@ const getAuditLogs = async (req, res) => {
 
       filter.action = req.query.action;
     }
-
-    // ----------------------------------------------
-    // Filter by target type
-    // ----------------------------------------------
 
     if (req.query.targetType) {
       if (!AUDIT_TARGET_TYPES.includes(req.query.targetType)) {
@@ -86,10 +82,6 @@ const getAuditLogs = async (req, res) => {
       filter.targetType = req.query.targetType;
     }
 
-    // ----------------------------------------------
-    // Filter by administrator
-    // ----------------------------------------------
-
     if (req.query.adminId) {
       if (!mongoose.isValidObjectId(req.query.adminId)) {
         return res.status(400).json({
@@ -99,10 +91,6 @@ const getAuditLogs = async (req, res) => {
 
       filter.adminId = req.query.adminId;
     }
-
-    // ----------------------------------------------
-    // Filter by affected resource
-    // ----------------------------------------------
 
     if (req.query.targetId) {
       if (!mongoose.isValidObjectId(req.query.targetId)) {
@@ -114,9 +102,32 @@ const getAuditLogs = async (req, res) => {
       filter.targetId = req.query.targetId;
     }
 
+    if (req.query.actorRole) {
+      if (
+        !["admin", "seller", "system"].includes(
+          req.query.actorRole
+        )
+      ) {
+        return res.status(400).json({
+          message: "Invalid actor role filter.",
+        });
+      }
+
+      filter.actorRole = req.query.actorRole;
+    }
+
+    if (req.query.actorId) {
+      if (!mongoose.isValidObjectId(req.query.actorId)) {
+        return res.status(400).json({
+          message: "Invalid actor ID.",
+        });
+      }
+
+      filter.actorId = req.query.actorId;
+    }
+
     // ----------------------------------------------
-    // Filter by date range
-    // Use ISO date strings in startDate/endDate.
+    // Date range
     // ----------------------------------------------
 
     const { startDate, endDate } = req.query;
@@ -129,7 +140,8 @@ const getAuditLogs = async (req, res) => {
 
         if (Number.isNaN(parsedStartDate.getTime())) {
           return res.status(400).json({
-            message: "Invalid startDate. Use a valid ISO date.",
+            message:
+              "Invalid startDate. Use a valid ISO date.",
           });
         }
 
@@ -141,7 +153,8 @@ const getAuditLogs = async (req, res) => {
 
         if (Number.isNaN(parsedEndDate.getTime())) {
           return res.status(400).json({
-            message: "Invalid endDate. Use a valid ISO date.",
+            message:
+              "Invalid endDate. Use a valid ISO date.",
           });
         }
 
@@ -154,19 +167,16 @@ const getAuditLogs = async (req, res) => {
         dateFilter.$gte > dateFilter.$lte
       ) {
         return res.status(400).json({
-          message: "startDate cannot be later than endDate.",
+          message:
+            "startDate cannot be later than endDate.",
         });
       }
 
       filter.createdAt = dateFilter;
     }
 
-    // ----------------------------------------------
-    // Retrieve audit records
-    // ----------------------------------------------
-
     const [logs, totalLogs] = await Promise.all([
-      populateAuditAdmin(
+      populateAuditActors(
         AuditLog.find(filter)
           .sort({
             createdAt: -1,
@@ -212,7 +222,7 @@ const getAuditLogById = async (req, res) => {
       });
     }
 
-    const log = await populateAuditAdmin(
+    const log = await populateAuditActors(
       AuditLog.findById(id)
     );
 

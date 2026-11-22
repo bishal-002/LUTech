@@ -1,26 +1,53 @@
 const mongoose = require("mongoose");
+
 const Order = require("../models/Order");
-const Product = require("../models/Product");
 const User = require("../models/User");
-const Cart = require("../models/Cart");
+const Product = require("../models/Product");
+
+const {
+  createPayoutForDeliveredOrder,
+} = require("../services/payoutService");
+
+// Keep the existing controller export compatible.
+const {
+  createCustomerOrder,
+} = require("./checkoutController");
+
+// ======================================================
+// GET SELLER ORDERS
+// ======================================================
 
 const getSellerOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ sellerId: req.user._id })
+    const orders = await Order.find({
+      sellerId: req.user._id,
+    })
       .populate("customerId", "name email")
       .sort({ createdAt: -1 });
 
-    return res.status(200).json({ count: orders.length, orders });
+    return res.status(200).json({
+      count: orders.length,
+      orders,
+    });
   } catch (error) {
     console.error("Get seller orders:", error);
-    return res.status(500).json({ message: "Unable to retrieve orders." });
+
+    return res.status(500).json({
+      message: "Unable to retrieve orders.",
+    });
   }
 };
+
+// ======================================================
+// GET SINGLE SELLER ORDER
+// ======================================================
 
 const getSellerOrderById = async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid order ID." });
+      return res.status(400).json({
+        message: "Invalid order ID.",
+      });
     }
 
     const order = await Order.findOne({
@@ -29,13 +56,20 @@ const getSellerOrderById = async (req, res) => {
     }).populate("customerId", "name email");
 
     if (!order) {
-      return res.status(404).json({ message: "Order not found." });
+      return res.status(404).json({
+        message: "Order not found.",
+      });
     }
 
-    return res.status(200).json({ order });
+    return res.status(200).json({
+      order,
+    });
   } catch (error) {
     console.error("Get seller order:", error);
-    return res.status(500).json({ message: "Unable to retrieve order." });
+
+    return res.status(500).json({
+      message: "Unable to retrieve order.",
+    });
   }
 };
 
@@ -65,12 +99,12 @@ const changeOrderStatus = async (order, status) => {
 
     try {
       await session.withTransaction(async () => {
-        // Reset these values in case the transaction retries.
         transitionAllowed = false;
         cancelledOrder = null;
 
-        // Always fetch the latest order status.
-        const currentOrder = await Order.findById(order._id).session(session);
+        const currentOrder = await Order.findById(
+          order._id
+        ).session(session);
 
         if (
           !currentOrder ||
@@ -79,7 +113,6 @@ const changeOrderStatus = async (order, status) => {
           return;
         }
 
-        // Restore stock for every item in the order.
         for (const item of currentOrder.items) {
           const stockUpdate = await Product.updateOne(
             {
@@ -98,8 +131,6 @@ const changeOrderStatus = async (order, status) => {
             { session }
           );
 
-          // Abort the entire transaction if the product
-          // or its variant cannot be found.
           if (stockUpdate.modifiedCount !== 1) {
             const itemName =
               item.snapshot?.title ||
@@ -112,8 +143,6 @@ const changeOrderStatus = async (order, status) => {
           }
         }
 
-        // Change the order status only after inventory
-        // restoration has succeeded.
         currentOrder.status = "cancelled";
 
         await currentOrder.save({ session });
@@ -126,8 +155,6 @@ const changeOrderStatus = async (order, status) => {
         return false;
       }
 
-      // Update the original order document used by the
-      // seller/admin response.
       order.status = cancelledOrder.status;
       order.paymentStatus = cancelledOrder.paymentStatus;
       order.updatedAt = cancelledOrder.updatedAt;
@@ -139,7 +166,7 @@ const changeOrderStatus = async (order, status) => {
   }
 
   // --------------------------------------------------
-  // OTHER STATUS TRANSITIONS: UPDATE ORDER AND METRICS
+  // OTHER STATUS TRANSITIONS
   // --------------------------------------------------
 
   const session = await mongoose.startSession();
@@ -149,12 +176,22 @@ const changeOrderStatus = async (order, status) => {
 
   try {
     await session.withTransaction(async () => {
-      // Reset values in case MongoDB retries the transaction.
       transitionAllowed = false;
       updatedOrder = null;
 
-      // Fetch the latest order status inside the transaction.
-      const currentOrder = await Order.findById(order._id)
+      // Load hidden financial snapshots explicitly.
+      const currentOrder = await Order.findById(
+        order._id
+      )
+        .select(
+          [
+            "+commissionRateSnapshot",
+            "+payoutHoldDaysSnapshot",
+            "+commissionBaseAmount",
+            "+platformCommissionAmount",
+            "+sellerNetAmount",
+          ].join(" ")
+        )
         .session(session);
 
       if (
@@ -164,27 +201,48 @@ const changeOrderStatus = async (order, status) => {
         return;
       }
 
-      // Update order status.
+      // Update order lifecycle.
       currentOrder.status = status;
 
-      if (
-        status === "delivered" &&
-        currentOrder.paymentMethod === "COD"
-      ) {
-        currentOrder.paymentStatus = "paid";
+      if (status === "delivered") {
+        currentOrder.deliveredAt = new Date();
+
+        if (currentOrder.paymentMethod === "COD") {
+          currentOrder.paymentStatus = "paid";
+        }
       }
 
       await currentOrder.save({ session });
 
-      // Update customer and seller metrics only on delivery.
+      // ------------------------------------------------
+      // CREATE SELLER PAYOUT WHEN COD ORDER IS DELIVERED
+      // ------------------------------------------------
+
+      if (
+        status === "delivered" &&
+        currentOrder.paymentMethod === "COD" &&
+        currentOrder.paymentStatus === "paid"
+      ) {
+        await createPayoutForDeliveredOrder({
+          order: currentOrder,
+          session,
+        });
+      }
+
+      // ------------------------------------------------
+      // UPDATE CUSTOMER AND SELLER METRICS
+      // ------------------------------------------------
+
       if (status === "delivered") {
-        // Update customer metrics.
         const customerUpdate = await User.updateOne(
-          { _id: currentOrder.customerId },
+          {
+            _id: currentOrder.customerId,
+          },
           {
             $inc: {
               "customerMetrics.deliveredOrders": 1,
-              "customerMetrics.totalSpent": currentOrder.totalAmount,
+              "customerMetrics.totalSpent":
+                currentOrder.totalAmount,
             },
           },
           { session }
@@ -196,9 +254,11 @@ const changeOrderStatus = async (order, status) => {
           );
         }
 
-        // Update seller completed orders.
         const sellerUpdate = await User.updateOne(
-          { _id: currentOrder.sellerId, role: "seller" },
+          {
+            _id: currentOrder.sellerId,
+            role: "seller",
+          },
           {
             $inc: {
               "metrics.completedOrders": 1,
@@ -222,9 +282,10 @@ const changeOrderStatus = async (order, status) => {
       return false;
     }
 
-    // Synchronize the original order object for the API response.
+    // Synchronize the original order for the response.
     order.status = updatedOrder.status;
     order.paymentStatus = updatedOrder.paymentStatus;
+    order.deliveredAt = updatedOrder.deliveredAt;
     order.updatedAt = updatedOrder.updatedAt;
 
     return true;
@@ -233,18 +294,32 @@ const changeOrderStatus = async (order, status) => {
   }
 };
 
+// ======================================================
+// UPDATE SELLER ORDER STATUS
+// ======================================================
+
 const updateSellerOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
 
     if (!mongoose.isValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid order ID." });
+      return res.status(400).json({
+        message: "Invalid order ID.",
+      });
     }
 
-    const allowed = ["confirmed", "processing", "shipped", "delivered", "cancelled"];
+    const allowed = [
+      "confirmed",
+      "processing",
+      "shipped",
+      "delivered",
+      "cancelled",
+    ];
 
     if (!allowed.includes(status)) {
-      return res.status(400).json({ message: "Invalid order status." });
+      return res.status(400).json({
+        message: "Invalid order status.",
+      });
     }
 
     const order = await Order.findOne({
@@ -253,14 +328,20 @@ const updateSellerOrderStatus = async (req, res) => {
     });
 
     if (!order) {
-      return res.status(404).json({ message: "Order not found." });
+      return res.status(404).json({
+        message: "Order not found.",
+      });
     }
 
-    const updated = await changeOrderStatus(order, status);
+    const updated = await changeOrderStatus(
+      order,
+      status
+    );
 
     if (!updated) {
       return res.status(400).json({
-        message: `Cannot change order from ${order.status} to ${status}.`,
+        message:
+          `Cannot change order from ${order.status} to ${status}.`,
       });
     }
 
@@ -270,248 +351,95 @@ const updateSellerOrderStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("Update seller order:", error);
-    return res.status(500).json({ message: "Unable to update order." });
+
+    return res.status(500).json({
+      message:
+        error.message || "Unable to update order.",
+    });
   }
 };
 
-const createCustomerOrder = async (req, res) => {
-  if (req.user.role !== "customer") {
-    return res.status(403).json({
-      message: "Only customer accounts can place orders.",
-    });
-  }
-
-  // Use the saved default address and customer contact details as fallbacks.
-  const customerProfile = await User.findById(req.user._id)
-    .select("name phone address addresses");
-
-  if (!customerProfile) {
-    return res.status(404).json({ message: "Customer account not found." });
-  }
-
-  const savedShippingAddress =
-    customerProfile.addresses?.find((item) => item.isDefaultShipping) ||
-    customerProfile.addresses?.[0];
-
-  const shippingName = String(
-    req.body.shippingName || savedShippingAddress?.recipientName || customerProfile.name || ""
-  ).trim();
-
-  const shippingPhone = String(
-    req.body.shippingPhone || savedShippingAddress?.recipientPhone || customerProfile.phone || ""
-  ).trim();
-
-  const savedAddressText = savedShippingAddress
-    ? [
-      savedShippingAddress.streetAddress,
-      savedShippingAddress.area,
-      savedShippingAddress.district,
-      savedShippingAddress.division,
-      savedShippingAddress.postalCode,
-    ].filter(Boolean).join(", ")
-    : "";
-
-  const shippingAddress = String(
-    req.body.shippingAddress || savedAddressText || customerProfile.address || ""
-  ).trim();
-
-  if (!shippingName || !shippingPhone || !shippingAddress) {
-    return res.status(400).json({
-      message: "Add a mobile number and delivery address to your account, or provide them at checkout.",
-    });
-  }
-
-  const session = await mongoose.startSession();
-
-  try {
-    let createdOrders = [];
-
-    await session.withTransaction(async () => {
-      const cartItems = await Cart.find({ userId: req.user._id }).session(session);
-
-      if (!cartItems.length) {
-        throw new Error("Your cart is empty.");
-      }
-
-      const sellerGroups = new Map();
-
-      for (const cartItem of cartItems) {
-        const product = await Product.findById(cartItem.productId).populate("brandId", "name").session(session);
-
-        if (!product) {
-          throw new Error("A product in your cart is no longer available.");
-        }
-
-        const variant = product.variants.id(cartItem.variantId);
-
-        if (!variant) {
-          throw new Error(`${product.title} has an unavailable variant.`);
-        }
-
-        const maxQuantity = variant.maxOrderQuantity || 99;
-
-        if (
-          cartItem.quantity > variant.stockQuantity ||
-          cartItem.quantity > maxQuantity
-        ) {
-          throw new Error(`Insufficient stock for ${product.title}.`);
-        }
-
-        const sellerId = product.sellerId || product.seller;
-
-        if (!sellerId) {
-          throw new Error(`${product.title} has no assigned seller.`);
-        }
-
-        const seller = await User.findOne({
-          _id: sellerId,
-          role: "seller",
-          status: "active",
-          sellerStatus: "approved",
-          verificationStatus: "approved",
-          isVerified: true,
-        }).session(session);
-
-        if (!seller) {
-          throw new Error(`The seller for ${product.title} is unavailable.`);
-        }
-
-        const stockUpdate = await Product.updateOne(
-          {
-            _id: product._id,
-            variants: {
-              $elemMatch: {
-                _id: variant._id,
-                stockQuantity: { $gte: cartItem.quantity },
-              },
-            },
-          },
-          {
-            $inc: {
-              "variants.$.stockQuantity": -cartItem.quantity,
-            },
-          },
-          { session }
-        );
-
-        if (stockUpdate.modifiedCount !== 1) {
-          throw new Error(`Stock changed for ${product.title}. Please retry.`);
-        }
-
-        const unitPrice = variant.salePrice ?? variant.regularPrice;
-        const mainImage = product.images?.find((image) => image.slot === "main");
-
-        const orderItem = {
-          productId: product._id,
-          variantId: variant._id,
-          snapshot: {
-            title: product.title,
-            sku: variant.sku,
-            attributes: variant.attributes || {},
-            image: mainImage?.url || product.image || "",
-            brand: product.brandId?.name || "",
-            condition: product.condition,
-          },
-          name: product.title,
-          price: unitPrice,
-          unitPrice,
-          image: mainImage?.url || product.image || "",
-          quantity: cartItem.quantity,
-          subtotal: unitPrice * cartItem.quantity,
-        };
-
-        const key = seller._id.toString();
-
-        if (!sellerGroups.has(key)) {
-          sellerGroups.set(key, {
-            sellerId: seller._id,
-            items: [],
-          });
-        }
-
-        sellerGroups.get(key).items.push(orderItem);
-      }
-
-      const orderDocuments = [];
-
-      for (const group of sellerGroups.values()) {
-        orderDocuments.push({
-          customerId: req.user._id,
-          sellerId: group.sellerId,
-          items: group.items,
-          shippingName: shippingName.trim(),
-          shippingPhone: shippingPhone.trim(),
-          shippingAddress: shippingAddress.trim(),
-          paymentMethod: "COD",
-          paymentStatus: "pending",
-          status: "pending",
-        });
-      }
-
-      createdOrders = await Order.create(orderDocuments, { session });
-
-      await Cart.deleteMany({ userId: req.user._id }).session(session);
-    });
-
-    return res.status(201).json({
-      message: "Your order has been placed successfully.",
-      paymentMethod: "COD",
-      count: createdOrders.length,
-      orders: createdOrders,
-    });
-  } catch (error) {
-    console.error("Customer checkout error:", error);
-
-    return res.status(400).json({
-      message: error.message || "Unable to place your order.",
-    });
-  } finally {
-    await session.endSession();
-  }
-};
+// ======================================================
+// GET CUSTOMER ORDERS
+// ======================================================
 
 const getCustomerOrders = async (req, res) => {
   try {
     if (req.user.role !== "customer") {
-      return res.status(403).json({ message: "Customer access only." });
+      return res.status(403).json({
+        message: "Customer access only.",
+      });
     }
 
-    const orders = await Order.find({ customerId: req.user._id })
-      .populate("sellerId", "name email storeName storeSlug")
+    const orders = await Order.find({
+      customerId: req.user._id,
+    })
+      .populate(
+        "sellerId",
+        "name email storeName storeSlug"
+      )
       .sort({ createdAt: -1 });
 
-    return res.status(200).json({ count: orders.length, orders });
+    return res.status(200).json({
+      count: orders.length,
+      orders,
+    });
   } catch (error) {
     console.error("Get customer orders:", error);
-    return res.status(500).json({ message: "Unable to retrieve orders." });
+
+    return res.status(500).json({
+      message: "Unable to retrieve orders.",
+    });
   }
 };
+
+// ======================================================
+// GET SINGLE CUSTOMER ORDER
+// ======================================================
 
 const getCustomerOrderById = async (req, res) => {
   try {
     if (req.user.role !== "customer") {
-      return res.status(403).json({ message: "Customer access only." });
+      return res.status(403).json({
+        message: "Customer access only.",
+      });
     }
 
     if (!mongoose.isValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid order ID." });
+      return res.status(400).json({
+        message: "Invalid order ID.",
+      });
     }
 
     const order = await Order.findOne({
       _id: req.params.id,
       customerId: req.user._id,
-    }).populate("sellerId", "name email storeName storeSlug");
+    }).populate(
+      "sellerId",
+      "name email storeName storeSlug"
+    );
 
     if (!order) {
-      return res.status(404).json({ message: "Order not found." });
+      return res.status(404).json({
+        message: "Order not found.",
+      });
     }
 
-    return res.status(200).json({ order });
+    return res.status(200).json({
+      order,
+    });
   } catch (error) {
     console.error("Get customer order:", error);
-    return res.status(500).json({ message: "Unable to retrieve order." });
+
+    return res.status(500).json({
+      message: "Unable to retrieve order.",
+    });
   }
 };
+
+// ======================================================
+// GET ALL ADMIN ORDERS
+// ======================================================
 
 const getAllOrders = async (req, res) => {
   try {
@@ -523,43 +451,76 @@ const getAllOrders = async (req, res) => {
 
     const orders = await Order.find(filter)
       .populate("customerId", "name email")
-      .populate("sellerId", "name email storeName storeSlug")
+      .populate(
+        "sellerId",
+        "name email storeName storeSlug"
+      )
       .sort({ createdAt: -1 });
 
-    return res.status(200).json({ count: orders.length, orders });
+    return res.status(200).json({
+      count: orders.length,
+      orders,
+    });
   } catch (error) {
     console.error("Get all orders:", error);
-    return res.status(500).json({ message: "Unable to retrieve orders." });
+
+    return res.status(500).json({
+      message: "Unable to retrieve orders.",
+    });
   }
 };
+
+// ======================================================
+// GET SINGLE ADMIN ORDER
+// ======================================================
 
 const getAdminOrderById = async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid order ID." });
+      return res.status(400).json({
+        message: "Invalid order ID.",
+      });
     }
 
-    const order = await Order.findById(req.params.id)
+    const order = await Order.findById(
+      req.params.id
+    )
       .populate("customerId", "name email")
-      .populate("sellerId", "name email storeName storeSlug");
+      .populate(
+        "sellerId",
+        "name email storeName storeSlug"
+      );
 
     if (!order) {
-      return res.status(404).json({ message: "Order not found." });
+      return res.status(404).json({
+        message: "Order not found.",
+      });
     }
 
-    return res.status(200).json({ order });
+    return res.status(200).json({
+      order,
+    });
   } catch (error) {
     console.error("Get admin order:", error);
-    return res.status(500).json({ message: "Unable to retrieve order." });
+
+    return res.status(500).json({
+      message: "Unable to retrieve order.",
+    });
   }
 };
+
+// ======================================================
+// UPDATE ADMIN ORDER STATUS
+// ======================================================
 
 const updateAdminOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
 
     if (!mongoose.isValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid order ID." });
+      return res.status(400).json({
+        message: "Invalid order ID.",
+      });
     }
 
     const allowed = [
@@ -572,20 +533,30 @@ const updateAdminOrderStatus = async (req, res) => {
     ];
 
     if (!allowed.includes(status)) {
-      return res.status(400).json({ message: "Invalid order status." });
+      return res.status(400).json({
+        message: "Invalid order status.",
+      });
     }
 
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(
+      req.params.id
+    );
 
     if (!order) {
-      return res.status(404).json({ message: "Order not found." });
+      return res.status(404).json({
+        message: "Order not found.",
+      });
     }
 
-    const updated = await changeOrderStatus(order, status);
+    const updated = await changeOrderStatus(
+      order,
+      status
+    );
 
     if (!updated) {
       return res.status(400).json({
-        message: `Cannot change order from ${order.status} to ${status}.`,
+        message:
+          `Cannot change order from ${order.status} to ${status}.`,
       });
     }
 
@@ -595,18 +566,29 @@ const updateAdminOrderStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("Update admin order:", error);
-    return res.status(500).json({ message: "Unable to update order." });
+
+    return res.status(500).json({
+      message:
+        error.message || "Unable to update order.",
+    });
   }
 };
+
+// ======================================================
+// EXPORTS
+// ======================================================
 
 module.exports = {
   getSellerOrders,
   getSellerOrderById,
   updateSellerOrderStatus,
+
   createCustomerOrder,
+
   getAllOrders,
   getAdminOrderById,
   updateAdminOrderStatus,
+
   getCustomerOrders,
   getCustomerOrderById,
 };

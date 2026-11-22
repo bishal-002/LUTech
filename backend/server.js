@@ -26,10 +26,12 @@ const adminSecurityRoutes = require("./routes/adminSecurityRoutes");
 const platformSettingsRoutes = require("./routes/platformSettingsRoutes");
 const auditLogRoutes = require("./routes/auditLogRoutes");
 const productModerationRoutes = require("./routes/productModerationRoutes");
+const adminPayoutRoutes = require("./routes/adminPayoutRoutes");
 
 const sellerRoutes = require("./routes/sellerRoutes");
 const sellerProfileRoutes = require("./routes/sellerProfileRoutes");
 const sellerKycRoutes = require("./routes/sellerKycRoutes");
+const payoutRoutes = require("./routes/payoutRoutes");
 
 const orderRoutes = require("./routes/orderRoutes");
 const customerOrderRoutes = require("./routes/customerOrderRoutes");
@@ -99,8 +101,8 @@ app.use("/api/catalog", catalogRoutes);
 app.use("/api/test-email", testEmailRoute);
 
 // ======================================================
-// ADMIN ROUTES
-// Mount specific sub-routes before the general router.
+// SPECIFIC ADMIN ROUTES
+// Mount before the general /api/admin router.
 // ======================================================
 
 app.use(
@@ -128,17 +130,32 @@ app.use(
   productModerationRoutes
 );
 
+app.use(
+  "/api/admin/payouts",
+  adminPayoutRoutes
+);
+
 // General administrator routes.
 app.use("/api/admin", adminRoutes);
 
 // ======================================================
 // SELLER ROUTES
+// Mount applicant/specific routes before sellerOnly.
 // ======================================================
 
 // Pending applicants need access to KYC.
-// Therefore, mount this before the sellerOnly router.
-app.use("/api/seller/kyc", sellerKycRoutes);
+app.use(
+  "/api/seller/kyc",
+  sellerKycRoutes
+);
 
+// Approved sellers use payout management.
+app.use(
+  "/api/seller/payouts",
+  payoutRoutes
+);
+
+// General seller routes.
 app.use("/api/seller", sellerRoutes);
 
 app.use(
@@ -197,7 +214,9 @@ const startServer = async () => {
     await connectDB();
 
     app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      console.log(
+        `Server running on port ${PORT}`
+      );
     });
   } catch (error) {
     console.error(

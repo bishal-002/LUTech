@@ -1,9 +1,16 @@
-
 const mongoose = require("mongoose");
+
+// ---------------------------------------------
+// MONEY HELPER
+// ---------------------------------------------
+
+const roundMoney = (value) =>
+  Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 
 // ---------------------------------------------
 // Historical product snapshot
 // ---------------------------------------------
+
 const productSnapshotSchema = new mongoose.Schema(
   {
     title: {
@@ -47,6 +54,7 @@ const productSnapshotSchema = new mongoose.Schema(
 // ---------------------------------------------
 // Order item schema
 // ---------------------------------------------
+
 const orderItemSchema = new mongoose.Schema(
   {
     productId: {
@@ -60,13 +68,12 @@ const orderItemSchema = new mongoose.Schema(
       required: true,
     },
 
-    // Historical product information
     snapshot: {
       type: productSnapshotSchema,
       required: true,
     },
 
-    // Legacy fields retained for compatibility
+    // Legacy fields retained for compatibility.
     name: {
       type: String,
       required: true,
@@ -84,7 +91,6 @@ const orderItemSchema = new mongoose.Schema(
       default: "",
     },
 
-    // Price and quantity at the time of purchase
     unitPrice: {
       type: Number,
       required: true,
@@ -107,14 +113,13 @@ const orderItemSchema = new mongoose.Schema(
       min: 0,
     },
   },
-  {
-    _id: false,
-  }
+  { _id: false }
 );
 
 // ---------------------------------------------
 // Main order schema
 // ---------------------------------------------
+
 const orderSchema = new mongoose.Schema(
   {
     customerId: {
@@ -141,7 +146,7 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
-    // Shipping information
+    // Shipping information.
     shippingName: {
       type: String,
       required: true,
@@ -160,7 +165,10 @@ const orderSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // -----------------------------------------
     // Financial breakdown
+    // -----------------------------------------
+
     subtotal: {
       type: Number,
       required: true,
@@ -186,7 +194,57 @@ const orderSchema = new mongoose.Schema(
       min: 0,
     },
 
+    // -----------------------------------------
+    // Internal seller commission snapshots
+    // These fields are not exposed by default.
+    // -----------------------------------------
+
+    commissionRateSnapshot: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: null,
+      select: false,
+    },
+
+    payoutHoldDaysSnapshot: {
+      type: Number,
+      min: 0,
+      max: 365,
+      default: null,
+      select: false,
+    },
+
+    commissionBaseAmount: {
+      type: Number,
+      min: 0,
+      default: 0,
+      select: false,
+    },
+
+    platformCommissionAmount: {
+      type: Number,
+      min: 0,
+      default: 0,
+      select: false,
+    },
+
+    sellerNetAmount: {
+      type: Number,
+      min: 0,
+      default: 0,
+      select: false,
+    },
+
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
+
+    // -----------------------------------------
     // COD payment configuration
+    // -----------------------------------------
+
     paymentMethod: {
       type: String,
       enum: ["COD"],
@@ -201,7 +259,10 @@ const orderSchema = new mongoose.Schema(
       required: true,
     },
 
+    // -----------------------------------------
     // Order lifecycle
+    // -----------------------------------------
+
     status: {
       type: String,
       enum: [
@@ -224,6 +285,7 @@ const orderSchema = new mongoose.Schema(
 // ---------------------------------------------
 // Synchronize item snapshots and calculate totals
 // ---------------------------------------------
+
 orderSchema.pre("validate", function () {
   let calculatedSubtotal = 0;
 
@@ -243,7 +305,7 @@ orderSchema.pre("validate", function () {
       item.price = item.unitPrice;
     }
 
-    // Preserve the historical item name and image.
+    // Preserve historical item name and image.
     if (!item.snapshot && item.name) {
       item.snapshot = {
         title: item.name,
@@ -277,16 +339,39 @@ orderSchema.pre("validate", function () {
       item.unitPrice !== null &&
       item.quantity
     ) {
-      item.subtotal = item.unitPrice * item.quantity;
+      item.subtotal = roundMoney(
+        item.unitPrice * item.quantity
+      );
+
       calculatedSubtotal += item.subtotal;
     }
   });
 
-  // Calculate order-level totals.
-  this.subtotal = calculatedSubtotal;
+  // Calculate order totals.
+  this.subtotal = roundMoney(calculatedSubtotal);
 
-  const shippingFee = this.shippingFee || 0;
-  const discount = this.discount || 0;
+  const shippingFee = Number(this.shippingFee || 0);
+  const discount = Number(this.discount || 0);
+
+  if (
+    !Number.isFinite(shippingFee) ||
+    shippingFee < 0
+  ) {
+    this.invalidate(
+      "shippingFee",
+      "Shipping fee must be a valid non-negative amount."
+    );
+  }
+
+  if (
+    !Number.isFinite(discount) ||
+    discount < 0
+  ) {
+    this.invalidate(
+      "discount",
+      "Discount must be a valid non-negative amount."
+    );
+  }
 
   if (discount > calculatedSubtotal + shippingFee) {
     this.invalidate(
@@ -295,13 +380,80 @@ orderSchema.pre("validate", function () {
     );
   }
 
-  this.totalAmount =
-    calculatedSubtotal + shippingFee - discount;
+  this.totalAmount = roundMoney(
+    calculatedSubtotal + shippingFee - discount
+  );
+
+  // -------------------------------------------
+  // Seller commission calculation
+  // -------------------------------------------
+
+  if (
+    this.commissionRateSnapshot !== null &&
+    this.commissionRateSnapshot !== undefined
+  ) {
+    const commissionRate = Number(
+      this.commissionRateSnapshot
+    );
+
+    if (
+      !Number.isFinite(commissionRate) ||
+      commissionRate < 0 ||
+      commissionRate > 100
+    ) {
+      this.invalidate(
+        "commissionRateSnapshot",
+        "The commission snapshot must be between 0 and 100."
+      );
+    }
+
+    const holdDays = Number(
+      this.payoutHoldDaysSnapshot
+    );
+
+    if (
+      !Number.isInteger(holdDays) ||
+      holdDays < 0 ||
+      holdDays > 365
+    ) {
+      this.invalidate(
+        "payoutHoldDaysSnapshot",
+        "Payout hold days must be a whole number between 0 and 365."
+      );
+    }
+
+    // The commission applies to merchandise after discount.
+    // Shipping fees are excluded from seller commission.
+    const merchandiseDiscount = Math.min(
+      Math.max(0, discount),
+      calculatedSubtotal
+    );
+
+    const commissionBase = roundMoney(
+      Math.max(
+        0,
+        calculatedSubtotal - merchandiseDiscount
+      )
+    );
+
+    const commissionAmount = roundMoney(
+      commissionBase * (commissionRate / 100)
+    );
+
+    const sellerNetAmount = roundMoney(
+      commissionBase - commissionAmount
+    );
+
+    this.commissionBaseAmount = commissionBase;
+    this.platformCommissionAmount = commissionAmount;
+    this.sellerNetAmount = sellerNetAmount;
+  }
 });
 
 // ---------------------------------------------
 // Indexes for order queries
 // ---------------------------------------------
+
 orderSchema.index({ customerId: 1, createdAt: -1 });
 orderSchema.index({ sellerId: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });

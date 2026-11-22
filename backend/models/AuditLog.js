@@ -5,26 +5,30 @@ const mongoose = require("mongoose");
 // ======================================================
 
 const AUDIT_ACTIONS = [
-  // Seller verification
+  // Seller verification.
   "SELLER_KYC_APPROVED",
   "SELLER_KYC_REJECTED",
   "SELLER_TIER_UPGRADED",
 
-  // Product moderation
+  // Seller payout.
+  "PAYOUT_CREATED",
+  "PAYOUT_RELEASED",
+  "SELLER_PAYOUT_DETAILS_UPDATED",
+
+  // Product moderation.
   "PRODUCT_VERIFIED_GENUINE",
   "PRODUCT_SUSPENDED",
   "PRODUCT_APPROVED",
   "PRODUCT_REJECTED",
 
-  // Catalog management
+  // Catalog management.
   "CATEGORY_SCHEMA_UPDATED",
 
-  // Finance and disputes
-  "PAYOUT_RELEASED",
+  // Finance and disputes.
   "DISPUTE_RESOLVED",
   "MANUAL_REFUND_ISSUED",
 
-  // Administrator management
+  // Administrator management.
   "ADMIN_PROFILE_CREATED",
   "ADMIN_PROFILE_UPDATED",
   "ADMIN_PERMISSIONS_UPDATED",
@@ -33,13 +37,13 @@ const AUDIT_ACTIONS = [
   "ADMIN_PROFILE_SUSPENDED",
   "ADMIN_PROFILE_REVOKED",
 
-  // Administrator security
+  // Administrator security.
   "ADMIN_SECURITY_SETTINGS_UPDATED",
   "ADMIN_2FA_ENABLED",
   "ADMIN_2FA_DISABLED",
   "ADMIN_PASSWORD_CHANGED",
 
-  // Platform configuration
+  // Platform configuration.
   "PLATFORM_SETTINGS_UPDATED",
 ];
 
@@ -53,8 +57,8 @@ const AUDIT_TARGET_TYPES = [
   "Product",
   "User",
   "Order",
-  "Category",
   "Payout",
+  "Category",
   "PlatformSettings",
 ];
 
@@ -64,6 +68,7 @@ const AUDIT_TARGET_TYPES = [
 
 const NOTE_REQUIRED_ACTIONS = [
   "SELLER_KYC_REJECTED",
+  "PAYOUT_RELEASED",
   "PRODUCT_SUSPENDED",
   "PRODUCT_REJECTED",
   "ADMIN_PROFILE_SUSPENDED",
@@ -80,9 +85,27 @@ const NOTE_REQUIRED_ACTIONS = [
 
 const auditLogSchema = new mongoose.Schema(
   {
+    // Kept for compatibility with existing admin logs.
+    // Seller and system-generated events may have null here.
     adminId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      default: null,
+      immutable: true,
+    },
+
+    // General actor identity.
+    actorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      immutable: true,
+    },
+
+    actorRole: {
+      type: String,
+      enum: ["admin", "seller", "system"],
+      default: "admin",
       required: true,
       immutable: true,
     },
@@ -145,11 +168,55 @@ const auditLogSchema = new mongoose.Schema(
 );
 
 // ======================================================
+// VALIDATION
+// ======================================================
+
+auditLogSchema.pre("validate", function () {
+  if (this.actorRole === "admin") {
+    if (!this.adminId) {
+      this.invalidate(
+        "adminId",
+        "An administrator audit entry requires adminId."
+      );
+    }
+
+    if (!this.actorId && this.adminId) {
+      this.actorId = this.adminId;
+    }
+  }
+
+  if (
+    this.actorRole === "seller" &&
+    !this.actorId
+  ) {
+    this.invalidate(
+      "actorId",
+      "A seller audit entry requires actorId."
+    );
+  }
+
+  if (
+    this.actorRole === "system" &&
+    this.adminId
+  ) {
+    this.invalidate(
+      "adminId",
+      "System audit entries cannot be assigned an administrator ID."
+    );
+  }
+});
+
+// ======================================================
 // INDEXES
 // ======================================================
 
 auditLogSchema.index({
   adminId: 1,
+  createdAt: -1,
+});
+
+auditLogSchema.index({
+  actorId: 1,
   createdAt: -1,
 });
 

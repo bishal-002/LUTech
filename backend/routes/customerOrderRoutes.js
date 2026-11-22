@@ -1,13 +1,13 @@
 const express = require("express");
 
 const {
+  createCustomerOrder,
+} = require("../controllers/checkoutController");
+
+const {
   getCustomerOrders,
   getCustomerOrderById,
 } = require("../controllers/orderController");
-
-const {
-  createCustomerOrder,
-} = require("../controllers/checkoutController");
 
 const {
   protect,
