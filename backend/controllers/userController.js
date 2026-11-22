@@ -170,9 +170,13 @@ const registerUser = async (req, res) => {
       email,
       password: hashedPassword,
       role: accountType,
+
       sellerStatus:
         accountType === "seller" ? "pending" : "not_applicable",
-      verificationStatus: "pending_review",
+
+      // Registration does not mean that KYC has been submitted.
+      verificationStatus: "not_submitted",
+
       otp: hashedOTP,
       otpExpires,
       otpAttempts: 0,
@@ -396,7 +400,7 @@ const loginUser = async (req, res) => {
         role: user.role || "customer",
         sellerStatus: user.sellerStatus || "not_applicable",
         verificationStatus:
-          user.verificationStatus || "pending_review",
+          user.verificationStatus || "not_submitted",
         isVerified: user.isVerified,
       },
     });
@@ -1764,8 +1768,14 @@ const applyToBecomeSeller = async (req, res) => {
     user.storePhone = storePhone.trim();
     user.storeAddress = storeAddress.trim();
 
+    // The seller application is recorded, but KYC review
+    // must not begin until the applicant submits their KYC.
     user.sellerStatus = "pending";
-    user.verificationStatus = "pending_review";
+    user.verificationStatus = "not_submitted";
+
+    // Clear the previous decision when a rejected applicant
+    // submits a new seller application.
+    user.adminReviewNote = "";
 
     user.sellerApplication = {
       reason: reason.trim(),
@@ -1777,7 +1787,8 @@ const applyToBecomeSeller = async (req, res) => {
     await user.save();
 
     return res.status(201).json({
-      message: "Seller application submitted successfully.",
+      message:
+        "Seller application received. Complete your KYC submission before admin review can begin.",
       sellerStatus: user.sellerStatus,
       verificationStatus: user.verificationStatus,
     });
@@ -1810,7 +1821,7 @@ const applyToBecomeSeller = async (req, res) => {
 const getSellerApplicationStatus = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select(
-      "role sellerStatus verificationStatus sellerApplication storeName storeDescription storePhone storeAddress"
+      "role sellerStatus verificationStatus sellerApplication storeName storeDescription storePhone storeAddress +sellerApplication.reviewNote"
     );
 
     if (!user) {
@@ -1832,7 +1843,7 @@ const getSellerApplicationStatus = async (req, res) => {
       role: user.role,
       sellerStatus: user.sellerStatus || "not_applicable",
       verificationStatus:
-        user.verificationStatus || "pending_review",
+        user.verificationStatus || "not_submitted",
       application,
       store: {
         storeName: user.storeName || "",

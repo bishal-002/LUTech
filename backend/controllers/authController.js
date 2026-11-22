@@ -44,7 +44,7 @@ const getPublicUser = (user) => ({
     role: user.role || "customer",
     sellerStatus: user.sellerStatus || "not_applicable",
     verificationStatus:
-        user.verificationStatus || "pending_review",
+        user.verificationStatus || "not_submitted",
     isVerified: user.isVerified,
 });
 

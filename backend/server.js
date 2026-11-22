@@ -29,6 +29,7 @@ const productModerationRoutes = require("./routes/productModerationRoutes");
 
 const sellerRoutes = require("./routes/sellerRoutes");
 const sellerProfileRoutes = require("./routes/sellerProfileRoutes");
+const sellerKycRoutes = require("./routes/sellerKycRoutes");
 
 const orderRoutes = require("./routes/orderRoutes");
 const customerOrderRoutes = require("./routes/customerOrderRoutes");
@@ -133,6 +134,10 @@ app.use("/api/admin", adminRoutes);
 // ======================================================
 // SELLER ROUTES
 // ======================================================
+
+// Pending applicants need access to KYC.
+// Therefore, mount this before the sellerOnly router.
+app.use("/api/seller/kyc", sellerKycRoutes);
 
 app.use("/api/seller", sellerRoutes);
 

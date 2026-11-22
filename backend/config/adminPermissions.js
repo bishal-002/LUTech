@@ -1,4 +1,3 @@
-
 // ======================================================
 // ADMIN ROLES
 // ======================================================
@@ -26,6 +25,7 @@ const ADMIN_PERMISSIONS = Object.freeze([
 
   // Seller verification
   "view_seller_applications",
+  "view_seller_kyc",
   "approve_sellers",
   "reject_sellers",
   "assign_seller_tiers",
@@ -66,6 +66,7 @@ const ROLE_DEFAULT_PERMISSIONS = Object.freeze({
 
   kyc_verifier: [
     "view_seller_applications",
+    "view_seller_kyc",
     "approve_sellers",
     "reject_sellers",
     "assign_seller_tiers",

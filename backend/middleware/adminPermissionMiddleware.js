@@ -1,4 +1,3 @@
-
 const AdminProfile = require("../models/AdminProfile");
 
 const {
@@ -24,18 +23,18 @@ const requireAdminPermission = (requiredPermission) => {
 
   return async (req, res, next) => {
     try {
-      // Ensure the request has an authenticated admin.
       if (!req.user || req.user.role !== "admin") {
         return res.status(403).json({
           message: "Administrator access required.",
         });
       }
 
-      // Retrieve the admin's separate profile.
       const adminProfile = await AdminProfile.findOne({
         userId: req.user._id,
       })
-        .select("adminRole permissions status security.twoFactorEnabled")
+        .select(
+          "adminRole permissions status security.twoFactorEnabled"
+        )
         .lean();
 
       if (!adminProfile) {
@@ -44,7 +43,6 @@ const requireAdminPermission = (requiredPermission) => {
         });
       }
 
-      // Check admin account status.
       if (adminProfile.status !== "active") {
         return res.status(403).json({
           message:
@@ -54,7 +52,6 @@ const requireAdminPermission = (requiredPermission) => {
         });
       }
 
-      // Check the explicitly assigned permission.
       if (
         !Array.isArray(adminProfile.permissions) ||
         !adminProfile.permissions.includes(requiredPermission)
@@ -65,7 +62,6 @@ const requireAdminPermission = (requiredPermission) => {
         });
       }
 
-      // Enforce 2FA for sensitive permissions.
       if (
         TWO_FACTOR_REQUIRED_PERMISSIONS.includes(requiredPermission) &&
         !adminProfile.security?.twoFactorEnabled
@@ -77,7 +73,6 @@ const requireAdminPermission = (requiredPermission) => {
         });
       }
 
-      // Make the profile available to the controller.
       req.adminProfile = adminProfile;
 
       return next();

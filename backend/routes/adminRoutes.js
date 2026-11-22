@@ -6,12 +6,15 @@ const {
   updateUserRole,
   deleteUser,
   getSellerApplications,
-  rejectSeller,
 } = require("../controllers/adminController");
 
 const {
+  getSellerKycQueue,
+  getSellerKycDetails,
+  downloadSellerKycDocument,
   approveSeller,
-} = require("../controllers/sellerApprovalController");
+  rejectSeller,
+} = require("../controllers/sellerKycAdminController");
 
 const {
   getAllOrders,
@@ -65,18 +68,44 @@ router.delete(
 // SELLER APPLICATION MANAGEMENT
 // ======================================================
 
+// Existing basic seller application list.
 router.get(
   "/sellers",
   requireAdminPermission("view_seller_applications"),
   getSellerApplications
 );
 
+// New KYC review queue.
+// Keep this static route before routes containing :id.
+router.get(
+  "/sellers/kyc/queue",
+  requireAdminPermission("view_seller_applications"),
+  getSellerKycQueue
+);
+
+// Private seller KYC details.
+router.get(
+  "/sellers/:id/kyc",
+  requireAdminPermission("view_seller_kyc"),
+  getSellerKycDetails
+);
+
+// Private seller KYC document access.
+router.get(
+  "/sellers/:id/kyc/documents/:documentType",
+  requireAdminPermission("view_seller_kyc"),
+  downloadSellerKycDocument
+);
+
+// KYC-aware approval.
+// approve_sellers continues to require administrator 2FA.
 router.put(
   "/sellers/:id/approve",
   requireAdminPermission("approve_sellers"),
   approveSeller
 );
 
+// KYC-aware rejection.
 router.put(
   "/sellers/:id/reject",
   requireAdminPermission("reject_sellers"),
@@ -101,8 +130,7 @@ router.get(
 
 // The existing permission catalog does not yet contain
 // a dedicated order-status management permission.
-// manage_disputes is used for this existing admin override
-// until the order/dispute permissions are separated.
+// manage_disputes is used for the existing admin override.
 router.patch(
   "/orders/:id/status",
   requireAdminPermission("manage_disputes"),

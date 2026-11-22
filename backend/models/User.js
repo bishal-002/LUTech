@@ -156,8 +156,136 @@ const sellerMetricsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// ======================================================
+// SELLER KYC DOCUMENT SCHEMA
+// ======================================================
+
+const MAX_KYC_DOCUMENT_SIZE = 5 * 1024 * 1024;
+
+const kycDocumentSchema = new mongoose.Schema(
+  {
+    storageKey: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 500,
+    },
+
+    originalName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 255,
+    },
+
+    mimeType: {
+      type: String,
+      enum: ["", "image/jpeg", "image/png", "application/pdf"],
+      default: "",
+    },
+
+    sizeBytes: {
+      type: Number,
+      min: 0,
+      max: MAX_KYC_DOCUMENT_SIZE,
+      default: 0,
+    },
+
+    uploadedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { _id: false }
+);
+
+// ======================================================
+// SELLER WAREHOUSE ADDRESS SCHEMA
+// ======================================================
+
+const sellerWarehouseAddressSchema = new mongoose.Schema(
+  {
+    street: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 300,
+      select: false,
+    },
+
+    city: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 100,
+      select: false,
+    },
+
+    district: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 100,
+      select: false,
+    },
+
+    postalCode: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 20,
+      select: false,
+    },
+
+    contactPerson: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+      select: false,
+    },
+
+    phone: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 20,
+      select: false,
+    },
+  },
+  { _id: false }
+);
+
+// ======================================================
+// SELLER KYC SCHEMA
+// ======================================================
+
 const sellerKycSchema = new mongoose.Schema(
   {
+    // Business classification.
+    businessType: {
+      type: String,
+      enum: ["individual", "retail_shop", "company"],
+      default: "individual",
+      select: false,
+    },
+
+    // Requested seller tier.
+    // The actual sellerType remains admin-controlled.
+    requestedSellerType: {
+      type: String,
+      enum: [
+        "standard_seller",
+        "official_brand",
+        "authorized_reseller",
+        "verified_shop",
+        "individual_seller",
+      ],
+      default: "standard_seller",
+      select: false,
+    },
+
+    // Account owner information.
     ownerName: {
       type: String,
       trim: true,
@@ -165,6 +293,7 @@ const sellerKycSchema = new mongoose.Schema(
       default: "",
       select: false,
     },
+
     ownerPhone: {
       type: String,
       trim: true,
@@ -172,71 +301,132 @@ const sellerKycSchema = new mongoose.Schema(
       default: "",
       select: false,
     },
+
+    ownerPhoneVerified: {
+      type: Boolean,
+      default: false,
+      select: false,
+    },
+
     nidNumber: {
       type: String,
       trim: true,
       default: "",
       select: false,
     },
+
+    // New identity document structure.
+    // Front and back are stored separately.
+    nidDocuments: {
+      front: {
+        type: kycDocumentSchema,
+        default: () => ({}),
+      },
+
+      back: {
+        type: kycDocumentSchema,
+        default: () => ({}),
+      },
+    },
+
+    // Legacy fields retained for existing records.
+    // New uploads should use nidDocuments.front and nidDocuments.back.
     nidFrontUrl: {
       type: String,
       trim: true,
       default: "",
       select: false,
     },
+
     nidBackUrl: {
       type: String,
       trim: true,
       default: "",
       select: false,
     },
+
+    // Business information.
     legalBusinessName: {
       type: String,
       trim: true,
       default: "",
+      maxlength: 160,
       select: false,
     },
+
     tradeLicenseNumber: {
       type: String,
       trim: true,
       default: "",
+      maxlength: 80,
       select: false,
     },
+
+    tradeLicenseDocument: {
+      type: kycDocumentSchema,
+      default: () => ({}),
+    },
+
+    // Legacy URL retained for existing records and integrations.
     tradeLicenseUrl: {
       type: String,
       trim: true,
       default: "",
       select: false,
     },
+
+    // Optional tax information.
     tinNumber: {
       type: String,
       trim: true,
       default: "",
+      maxlength: 30,
       select: false,
     },
+
     binNumber: {
       type: String,
       trim: true,
       default: "",
+      maxlength: 30,
       select: false,
     },
+
+    // Brand authorization documentation.
+    authorizationDocument: {
+      type: kycDocumentSchema,
+      default: () => ({}),
+    },
+
+    // Legacy URL retained for existing records and integrations.
     authorizationDocUrl: {
       type: String,
       trim: true,
       default: "",
       select: false,
     },
+
+    // Deprecated nested path retained temporarily
+    // for existing seller records.
     warehouseAddress: {
-      street: { type: String, trim: true, default: "", select: false },
-      city: { type: String, trim: true, default: "", select: false },
-      district: { type: String, trim: true, default: "", select: false },
-      postalCode: { type: String, trim: true, default: "", select: false },
-      contactPerson: { type: String, trim: true, default: "", select: false },
-      phone: { type: String, trim: true, default: "", select: false },
+      type: sellerWarehouseAddressSchema,
+      default: () => ({}),
+      select: false,
+    },
+
+    // KYC submission timestamp.
+    submittedAt: {
+      type: Date,
+      default: null,
+      select: false,
     },
   },
   { _id: false }
 );
+
+// ======================================================
+// SELLER PAYOUT SCHEMA
+// ======================================================
 
 const sellerPayoutSchema = new mongoose.Schema(
   {
@@ -246,34 +436,110 @@ const sellerPayoutSchema = new mongoose.Schema(
       default: "",
       select: false,
     },
-    bankName: { type: String, trim: true, default: "", select: false },
-    branchName: { type: String, trim: true, default: "", select: false },
-    routingNumber: { type: String, trim: true, default: "", select: false },
+
+    bankName: {
+      type: String,
+      trim: true,
+      default: "",
+      select: false,
+    },
+
+    branchName: {
+      type: String,
+      trim: true,
+      default: "",
+      select: false,
+    },
+
+    routingNumber: {
+      type: String,
+      trim: true,
+      default: "",
+      select: false,
+    },
+
     accountHolderName: {
       type: String,
       trim: true,
       default: "",
       select: false,
     },
+
     accountNumber: {
       type: String,
       trim: true,
       default: "",
       select: false,
     },
+
     mfsProvider: {
       type: String,
       enum: ["bKash", "Nagad", "Rocket", ""],
       default: "",
       select: false,
     },
+
     mfsAccountType: {
       type: String,
       enum: ["Merchant", "Personal", ""],
       default: "",
       select: false,
     },
-    mfsNumber: { type: String, trim: true, default: "", select: false },
+
+    mfsNumber: {
+      type: String,
+      trim: true,
+      default: "",
+      select: false,
+    },
+  },
+  { _id: false }
+);
+
+// ======================================================
+// SELLER KYC PHONE OTP SCHEMA
+// ======================================================
+
+const sellerKycPhoneOtpSchema = new mongoose.Schema(
+  {
+    // Only a hashed OTP should be stored.
+    otpHash: {
+      type: String,
+      default: undefined,
+      select: false,
+    },
+
+    otpExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    otpAttempts: {
+      type: Number,
+      default: 0,
+      min: 0,
+      select: false,
+    },
+
+    otpLastSentAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    otpSendCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      select: false,
+    },
+
+    otpSendWindowStart: {
+      type: Date,
+      default: null,
+      select: false,
+    },
   },
   { _id: false }
 );
@@ -562,6 +828,7 @@ const userSchema = new mongoose.Schema(
       default: "",
     },
 
+    // This field remains admin-controlled.
     sellerType: {
       type: String,
       enum: [
@@ -623,11 +890,28 @@ const userSchema = new mongoose.Schema(
     storeAddress: { type: String, trim: true, default: "" },
 
     // ==================================================
-    // EXISTING SELLER PRIVATE KYC AND PAYOUT
+    // SELLER PRIVATE KYC AND PAYOUT
     // ==================================================
 
+    // Private warehouse/pickup address.
+    // Never include this in public seller responses.
+    warehouseAddress: {
+      type: sellerWarehouseAddressSchema,
+      default: () => ({}),
+      select: false,
+    },
+
+    // Private KYC data.
+    // Explicitly select only what an authorized operation needs.
     kyc: {
       type: sellerKycSchema,
+      default: () => ({}),
+      select: false,
+    },
+
+    // Keep phone OTP secrets separate from the KYC payload.
+    sellerKycPhoneOtp: {
+      type: sellerKycPhoneOtpSchema,
       default: () => ({}),
       select: false,
     },
@@ -699,10 +983,13 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+// ======================================================
 // COMPATIBILITY VIRTUALS
+// ======================================================
 
 // The existing application uses name/isVerified.
 // These aliases expose the requested customer terminology.
+
 userSchema.virtual("fullName")
   .get(function () {
     return this.name;
@@ -719,14 +1006,63 @@ userSchema.virtual("isEmailVerified")
     this.isVerified = value;
   });
 
+// ======================================================
 // VALIDATION AND SELLER FIELD SYNCHRONIZATION
+// ======================================================
 
 userSchema.pre("validate", function () {
   if (this.email) {
     this.email = this.email.trim().toLowerCase();
   }
 
-  // Customer address validation.
+  // Changing the KYC owner phone invalidates any previous OTP verification.
+  if (this.isModified("kyc.ownerPhone")) {
+    this.set("kyc.ownerPhoneVerified", false);
+    this.set("sellerKycPhoneOtp.otpHash", undefined);
+    this.set("sellerKycPhoneOtp.otpExpiresAt", null);
+    this.set("sellerKycPhoneOtp.otpAttempts", 0);
+  }
+
+  // Backward compatibility:
+  // Copy the old nested warehouse address to the new canonical
+  // User.warehouseAddress path when legacy data is loaded.
+  const legacyWarehouse = this.kyc?.warehouseAddress;
+  const currentWarehouse = this.warehouseAddress;
+
+  const hasAddressValues = (value) =>
+    value &&
+    [
+      "street",
+      "city",
+      "district",
+      "postalCode",
+      "contactPerson",
+      "phone",
+    ].some((key) => String(value[key] || "").trim());
+
+  if (
+    !hasAddressValues(currentWarehouse) &&
+    hasAddressValues(legacyWarehouse)
+  ) {
+    const legacyValue =
+      typeof legacyWarehouse.toObject === "function"
+        ? legacyWarehouse.toObject()
+        : legacyWarehouse;
+
+    this.warehouseAddress = {
+      street: legacyValue.street || "",
+      city: legacyValue.city || "",
+      district: legacyValue.district || "",
+      postalCode: legacyValue.postalCode || "",
+      contactPerson: legacyValue.contactPerson || "",
+      phone: legacyValue.phone || "",
+    };
+  }
+
+  // ==================================================
+  // CUSTOMER ADDRESS VALIDATION
+  // ==================================================
+
   if (Array.isArray(this.addresses)) {
     if (this.addresses.length > 5) {
       this.invalidate(
@@ -762,7 +1098,10 @@ userSchema.pre("validate", function () {
     this.recentlyViewed = this.recentlyViewed.slice(-12);
   }
 
-  // Preserve existing Seller compatibility behavior.
+  // ==================================================
+  // PRESERVE EXISTING SELLER COMPATIBILITY BEHAVIOR
+  // ==================================================
+
   if (!this.storeDescription && this.about) {
     this.storeDescription = this.about;
   }
@@ -790,7 +1129,10 @@ userSchema.pre("validate", function () {
     this.storeAddress = addressParts.join(", ");
   }
 
-  // Generate or update store slug when a store is created or renamed.
+  // ==================================================
+  // STORE SLUG GENERATION
+  // ==================================================
+
   if (
     this.storeName &&
     (this.isNew || this.isModified("storeName") || !this.storeSlug)
@@ -802,7 +1144,10 @@ userSchema.pre("validate", function () {
       .replace(/^-+|-+$/g, "");
   }
 
-  // Existing Seller validations.
+  // ==================================================
+  // EXISTING SELLER VALIDATIONS
+  // ==================================================
+
   if (this.role === "seller" && this.storeName) {
     if (this.storeName.length < 3 || this.storeName.length > 50) {
       this.invalidate(
@@ -844,6 +1189,10 @@ userSchema.pre("validate", function () {
     }
   }
 
+  // ==================================================
+  // NID / PASSPORT VALIDATION
+  // ==================================================
+
   if (this.isModified("kyc.nidNumber") && this.kyc?.nidNumber) {
     const nid = this.kyc.nidNumber.trim();
 
@@ -857,7 +1206,6 @@ userSchema.pre("validate", function () {
       );
     }
   }
-
 });
 
 // ======================================================

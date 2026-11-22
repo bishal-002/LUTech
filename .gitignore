@@ -13,3 +13,6 @@
 
 # # Logs
 # *.log
+
+# # Private seller KYC documents
+# # backend/private_uploads/
