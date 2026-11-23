@@ -13,6 +13,26 @@ const {
 } = require("../controllers/productCreationController");
 
 const {
+  uploadProductImage,
+  uploadProductVideo,
+  uploadProductVerificationProof,
+} = require("../controllers/productUploadController");
+
+const {
+  validateProductPayload,
+} = require("../middleware/productValidationMiddleware");
+
+const {
+  uploadProductImageFile,
+  uploadProductVideoFile,
+  uploadProductProofFile,
+} = require("../middleware/productUploadMiddleware");
+
+const {
+  PUBLIC_PRODUCT_MEDIA_ROOT,
+} = require("../services/productStorageService");
+
+const {
   protect,
   sellerOnly,
 } = require("../middleware/authMiddleware");
@@ -22,6 +42,21 @@ const {
 } = require("../middleware/adminPermissionMiddleware");
 
 const router = express.Router();
+
+// ======================================================
+// PUBLIC PRODUCT MEDIA
+// ======================================================
+
+router.use(
+  "/media",
+  express.static(PUBLIC_PRODUCT_MEDIA_ROOT, {
+    dotfiles: "deny",
+    index: false,
+    fallthrough: true,
+    maxAge: "1y",
+    immutable: true,
+  })
+);
 
 // ======================================================
 // ADMIN OR APPROVED SELLER MIDDLEWARE
@@ -41,8 +76,6 @@ const adminOrApprovedSeller = (permission) => {
   };
 };
 
-// Administrators cannot permanently delete products.
-// They must use the suspension workflow instead.
 const approvedSellerOnly = (req, res, next) => {
   if (req.user?.role === "admin") {
     return res.status(403).json({
@@ -53,6 +86,38 @@ const approvedSellerOnly = (req, res, next) => {
 
   return sellerOnly(req, res, next);
 };
+
+// ======================================================
+// IMAGE / VIDEO UPLOAD
+// ======================================================
+
+router.post(
+  "/uploads/image",
+  protect,
+  adminOrApprovedSeller("approve_products"),
+  uploadProductImageFile,
+  uploadProductImage
+);
+
+router.post(
+  "/uploads/video",
+  protect,
+  adminOrApprovedSeller("approve_products"),
+  uploadProductVideoFile,
+  uploadProductVideo
+);
+
+// ======================================================
+// PRODUCT VERIFICATION PROOF
+// ======================================================
+
+router.post(
+  "/:id/verification-proof",
+  protect,
+  adminOrApprovedSeller("approve_products"),
+  uploadProductProofFile,
+  uploadProductVerificationProof
+);
 
 // ======================================================
 // PUBLIC PRODUCT ROUTES
@@ -70,27 +135,25 @@ router.get(
 router.get("/:id", getProductById);
 
 // ======================================================
-// PRODUCT MANAGEMENT ROUTES
+// PRODUCT MANAGEMENT
 // ======================================================
 
-// Create product.
 router.post(
   "/",
   protect,
   adminOrApprovedSeller("approve_products"),
+  validateProductPayload,
   createProduct
 );
 
-// Update product.
 router.put(
   "/:id",
   protect,
   adminOrApprovedSeller("approve_products"),
+  validateProductPayload,
   updateProduct
 );
 
-// Sellers can delete their own products.
-// Administrators must use the suspension API.
 router.delete(
   "/:id",
   protect,

@@ -20,6 +20,10 @@ const {
 } = require("../controllers/sellerCatalogController");
 
 const {
+  validateCategorySpecificationTemplate,
+} = require("../middleware/productValidationMiddleware");
+
+const {
   protect,
   adminOnly,
   sellerOnly,
@@ -53,13 +57,17 @@ router.get("/categories", getCategories);
 router.get("/categories/:id", getCategoryById);
 
 // ======================================================
-// ADMIN ROUTES
+// ADMIN READ ROUTES
 // ======================================================
 
 router.use("/admin", protect, adminOnly);
 
 router.get("/admin/brands", getAllBrandsAdmin);
 router.get("/admin/categories", getAllCategoriesAdmin);
+
+// ======================================================
+// ADMIN BRAND MANAGEMENT
+// ======================================================
 
 router.post(
   "/brands",
@@ -82,10 +90,15 @@ router.delete(
   deactivateBrand
 );
 
+// ======================================================
+// ADMIN CATEGORY MANAGEMENT
+// ======================================================
+
 router.post(
   "/categories",
   protect,
   adminOnly,
+  validateCategorySpecificationTemplate,
   createCategory
 );
 
@@ -93,6 +106,7 @@ router.put(
   "/categories/:id",
   protect,
   adminOnly,
+  validateCategorySpecificationTemplate,
   updateCategory
 );
 

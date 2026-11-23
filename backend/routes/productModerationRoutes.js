@@ -1,4 +1,3 @@
-
 const express = require("express");
 
 const {
@@ -8,6 +7,10 @@ const {
   verifyGenuineProduct,
   suspendProduct,
 } = require("../controllers/productModerationController");
+
+const {
+  getProductVerificationProof,
+} = require("../controllers/productProofController");
 
 const {
   protect,
@@ -29,6 +32,13 @@ router.get(
   "/",
   requireAdminPermission("approve_products"),
   getProductsForModeration
+);
+
+// Download private product verification proof.
+router.get(
+  "/:id/verification-proof",
+  requireAdminPermission("approve_products"),
+  getProductVerificationProof
 );
 
 // Approve a pending product.
