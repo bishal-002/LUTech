@@ -1,3 +1,4 @@
+
 const Product = require("../models/Product");
 const Brand = require("../models/Brand");
 const Category = require("../models/Category");
@@ -38,6 +39,7 @@ const ALLOWED_PRODUCT_FIELDS = [
   "dispatchTime",
   "preorderReleaseDate",
   "specifications",
+  "compatibility",
 ];
 
 // ======================================================
@@ -139,8 +141,10 @@ const createProduct = async (req, res) => {
       });
     }
 
-    // Load platform settings for seller-created products.
-    // Administrators retain the existing product-creation behavior.
+    // --------------------------------------------------
+    // LOAD PLATFORM SETTINGS
+    // --------------------------------------------------
+
     let settings = null;
 
     if (user.role === "seller") {
@@ -165,7 +169,10 @@ const createProduct = async (req, res) => {
       }
     }
 
-    // Verify the selected brand and category.
+    // --------------------------------------------------
+    // VERIFY BRAND AND CATEGORY
+    // --------------------------------------------------
+
     const [brand, category] = await Promise.all([
       Brand.findOne({
         _id: productData.brandId,
@@ -192,6 +199,10 @@ const createProduct = async (req, res) => {
       });
     }
 
+    // --------------------------------------------------
+    // REQUIRED PRODUCT DATA
+    // --------------------------------------------------
+
     if (!productData.images) {
       return res.status(400).json({
         message: "Product images are required.",
@@ -205,7 +216,10 @@ const createProduct = async (req, res) => {
       });
     }
 
-    // Ownership is always assigned by the backend.
+    // --------------------------------------------------
+    // ASSIGN PRODUCT OWNERSHIP
+    // --------------------------------------------------
+
     const sellerId = user._id || user.id;
 
     if (!sellerId) {
@@ -217,6 +231,10 @@ const createProduct = async (req, res) => {
 
     productData.sellerId = sellerId;
     productData.seller = sellerId;
+
+    // --------------------------------------------------
+    // PRODUCT MODERATION
+    // --------------------------------------------------
 
     // Automatic approval applies only to individual sellers.
     if (
@@ -233,7 +251,13 @@ const createProduct = async (req, res) => {
       productData.moderationStatus = "approved";
     }
 
-    const product = await Product.create(productData);
+    // --------------------------------------------------
+    // CREATE PRODUCT
+    // --------------------------------------------------
+
+    const product = await Product.create(
+      productData
+    );
 
     return res.status(201).json({
       success: true,
@@ -244,6 +268,10 @@ const createProduct = async (req, res) => {
     return handleProductError(res, error);
   }
 };
+
+// ======================================================
+// EXPORTS
+// ======================================================
 
 module.exports = {
   createProduct,

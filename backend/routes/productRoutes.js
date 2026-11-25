@@ -1,3 +1,4 @@
+
 const express = require("express");
 
 const {
@@ -13,6 +14,12 @@ const {
 } = require("../controllers/productCreationController");
 
 const {
+  getProductCompatibility,
+  updateProductCompatibility,
+  getCompatibleProducts,
+} = require("../controllers/productCompatibilityController");
+
+const {
   uploadProductImage,
   uploadProductVideo,
   uploadProductVerificationProof,
@@ -21,6 +28,11 @@ const {
 const {
   validateProductPayload,
 } = require("../middleware/productValidationMiddleware");
+
+const {
+  validateCompatibilityOnCreate,
+  validateCompatibilityOnUpdate,
+} = require("../middleware/productCompatibilityMiddleware");
 
 const {
   uploadProductImageFile,
@@ -80,7 +92,7 @@ const approvedSellerOnly = (req, res, next) => {
   if (req.user?.role === "admin") {
     return res.status(403).json({
       message:
-        "Administrators must suspend products through the moderation API.",
+        "Administrators must suspend products through the product moderation API.",
     });
   }
 
@@ -120,10 +132,29 @@ router.post(
 );
 
 // ======================================================
+// PUBLIC DEVICE COMPATIBILITY ROUTES
+// ======================================================
+
+// Find all approved products compatible with a device.
+router.get(
+  "/compatible/:deviceId",
+  getCompatibleProducts
+);
+
+// Retrieve compatibility information for one product.
+router.get(
+  "/:id/compatibility",
+  getProductCompatibility
+);
+
+// ======================================================
 // PUBLIC PRODUCT ROUTES
 // ======================================================
 
-router.get("/", getProducts);
+router.get(
+  "/",
+  getProducts
+);
 
 router.get(
   "/mine",
@@ -132,10 +163,13 @@ router.get(
   getMyProducts
 );
 
-router.get("/:id", getProductById);
+router.get(
+  "/:id",
+  getProductById
+);
 
 // ======================================================
-// PRODUCT MANAGEMENT
+// CREATE PRODUCT
 // ======================================================
 
 router.post(
@@ -143,8 +177,25 @@ router.post(
   protect,
   adminOrApprovedSeller("approve_products"),
   validateProductPayload,
+  validateCompatibilityOnCreate,
   createProduct
 );
+
+// ======================================================
+// UPDATE PRODUCT COMPATIBILITY
+// ======================================================
+
+router.put(
+  "/:id/compatibility",
+  protect,
+  adminOrApprovedSeller("approve_products"),
+  validateCompatibilityOnUpdate,
+  updateProductCompatibility
+);
+
+// ======================================================
+// UPDATE PRODUCT
+// ======================================================
 
 router.put(
   "/:id",
@@ -153,6 +204,10 @@ router.put(
   validateProductPayload,
   updateProduct
 );
+
+// ======================================================
+// DELETE PRODUCT
+// ======================================================
 
 router.delete(
   "/:id",

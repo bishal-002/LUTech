@@ -1,6 +1,10 @@
 
 const mongoose = require("mongoose");
 
+const productCompatibilitySchema = require(
+  "./ProductCompatibility"
+);
+
 // ======================================================
 // HELPERS
 // ======================================================
@@ -640,6 +644,19 @@ const productSchema = new mongoose.Schema(
     },
 
     // --------------------------------------------------
+    // DEVICE COMPATIBILITY
+    // --------------------------------------------------
+
+    compatibility: {
+      type: productCompatibilitySchema,
+      default: () => ({
+        mode: "not_applicable",
+        devices: [],
+        notes: "",
+      }),
+    },
+
+    // --------------------------------------------------
     // SELLER REFERENCES
     // --------------------------------------------------
 
@@ -773,7 +790,7 @@ productSchema.pre("validate", function () {
     if (new Set(skus).size !== skus.length) {
       this.invalidate(
         "variants",
-        "Variant SKUs must be unique within a product."
+        "Variant SKUs must be unique within the same product."
       );
     }
 
@@ -895,6 +912,15 @@ productSchema.index({
 productSchema.index({
   moderationStatus: 1,
   createdAt: -1,
+});
+
+// Device compatibility indexes.
+productSchema.index({
+  "compatibility.devices.deviceId": 1,
+});
+
+productSchema.index({
+  "compatibility.mode": 1,
 });
 
 // ======================================================
