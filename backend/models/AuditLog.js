@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 
 // ======================================================
@@ -68,6 +69,7 @@ const AUDIT_TARGET_TYPES = [
 
 const NOTE_REQUIRED_ACTIONS = [
   "SELLER_KYC_REJECTED",
+  "SELLER_TIER_UPGRADED",
   "PAYOUT_RELEASED",
   "PRODUCT_SUSPENDED",
   "PRODUCT_REJECTED",
@@ -85,8 +87,7 @@ const NOTE_REQUIRED_ACTIONS = [
 
 const auditLogSchema = new mongoose.Schema(
   {
-    // Kept for compatibility with existing admin logs.
-    // Seller and system-generated events may have null here.
+    // Backward compatibility with existing admin logs.
     adminId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -149,7 +150,9 @@ const auditLogSchema = new mongoose.Schema(
       trim: true,
       maxlength: 500,
       required: function () {
-        return NOTE_REQUIRED_ACTIONS.includes(this.action);
+        return NOTE_REQUIRED_ACTIONS.includes(
+          this.action
+        );
       },
       immutable: true,
     },
@@ -237,7 +240,9 @@ auditLogSchema.index({
 
 auditLogSchema.pre("save", function () {
   if (!this.isNew) {
-    throw new Error("Audit log records cannot be modified.");
+    throw new Error(
+      "Audit log records cannot be modified."
+    );
   }
 });
 
@@ -257,7 +262,10 @@ const blockAuditMutation = function () {
   "deleteMany",
   "findOneAndDelete",
 ].forEach((operation) => {
-  auditLogSchema.pre(operation, blockAuditMutation);
+  auditLogSchema.pre(
+    operation,
+    blockAuditMutation
+  );
 });
 
 // ======================================================

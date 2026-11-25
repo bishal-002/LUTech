@@ -1,3 +1,4 @@
+
 const express = require("express");
 
 const {
@@ -15,6 +16,10 @@ const {
   approveSeller,
   rejectSeller,
 } = require("../controllers/sellerKycAdminController");
+
+const {
+  upgradeSellerTier,
+} = require("../controllers/sellerTierController");
 
 const {
   getAllOrders,
@@ -68,15 +73,12 @@ router.delete(
 // SELLER APPLICATION MANAGEMENT
 // ======================================================
 
-// Existing basic seller application list.
 router.get(
   "/sellers",
   requireAdminPermission("view_seller_applications"),
   getSellerApplications
 );
 
-// New KYC review queue.
-// Keep this static route before routes containing :id.
 router.get(
   "/sellers/kyc/queue",
   requireAdminPermission("view_seller_applications"),
@@ -90,26 +92,41 @@ router.get(
   getSellerKycDetails
 );
 
-// Private seller KYC document access.
+// Private KYC document access.
 router.get(
   "/sellers/:id/kyc/documents/:documentType",
   requireAdminPermission("view_seller_kyc"),
   downloadSellerKycDocument
 );
 
-// KYC-aware approval.
-// approve_sellers continues to require administrator 2FA.
+// Seller KYC approval.
 router.put(
   "/sellers/:id/approve",
   requireAdminPermission("approve_sellers"),
   approveSeller
 );
 
-// KYC-aware rejection.
+// Seller KYC rejection.
 router.put(
   "/sellers/:id/reject",
   requireAdminPermission("reject_sellers"),
   rejectSeller
+);
+
+// ======================================================
+// SELLER TIER MANAGEMENT
+// ======================================================
+
+// Only administrators with assign_seller_tiers
+// permission can upgrade an approved seller.
+//
+// The controller validates the existing seller KYC
+// documents and writes an immutable audit record.
+
+router.patch(
+  "/sellers/:id/upgrade-tier",
+  requireAdminPermission("assign_seller_tiers"),
+  upgradeSellerTier
 );
 
 // ======================================================
@@ -128,9 +145,7 @@ router.get(
   getAdminOrderById
 );
 
-// The existing permission catalog does not yet contain
-// a dedicated order-status management permission.
-// manage_disputes is used for the existing admin override.
+// Existing admin order-status override.
 router.patch(
   "/orders/:id/status",
   requireAdminPermission("manage_disputes"),
