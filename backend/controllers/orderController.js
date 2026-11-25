@@ -13,6 +13,10 @@ const {
   notifyRestockEvents,
 } = require("../services/productNotificationService");
 
+const {
+  initializeWarrantyRemindersForDeliveredOrder,
+} = require("../services/warrantyService");
+
 // Keep the existing controller export compatible.
 const {
   createCustomerOrder,
@@ -351,6 +355,14 @@ const changeOrderStatus = async (
       if (status === "delivered") {
         currentOrder.deliveredAt = new Date();
 
+        // Create warranty expiry reminders and snapshot
+        // warranty dates inside the delivery transaction.
+        await initializeWarrantyRemindersForDeliveredOrder({
+          order: currentOrder,
+          deliveredAt: currentOrder.deliveredAt,
+          session,
+        });
+
         if (currentOrder.paymentMethod === "COD") {
           currentOrder.paymentStatus = "paid";
         }
@@ -481,6 +493,12 @@ const changeOrderStatus = async (
       updatedOrder.refusalRecordedBy;
     order.refusalNote = updatedOrder.refusalNote;
     order.updatedAt = updatedOrder.updatedAt;
+
+    // Include the warranty dates in the response after
+    // a successful delivery transition.
+    if (status === "delivered") {
+      order.items = updatedOrder.items;
+    }
 
     return true;
   } finally {

@@ -1,3 +1,4 @@
+
 require("dotenv").config();
 
 const dns = require("dns");
@@ -9,6 +10,10 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 
 const connectDB = require("./config/db");
+
+const {
+  startWarrantyReminderScheduler,
+} = require("./jobs/warrantyReminderJob");
 
 // ======================================================
 // ROUTES
@@ -212,6 +217,10 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
   try {
     await connectDB();
+
+    // Start warranty reminder processing only after
+    // MongoDB has connected successfully.
+    startWarrantyReminderScheduler();
 
     app.listen(PORT, () => {
       console.log(

@@ -381,6 +381,29 @@ const createCustomerOrder = async (req, res) => {
               image: productImage,
               brand: product.brandId?.name || "",
               condition: product.condition,
+
+              // Preserve the warranty terms that applied
+              // at purchase time. The warranty begins
+              // only when the order is delivered.
+              warranty: {
+                type:
+                  product.warrantyType || "No Warranty",
+
+                duration: {
+                  value:
+                    product.warrantyDuration?.value ?? null,
+
+                  unit:
+                    product.warrantyDuration?.unit ||
+                    "Months",
+                },
+
+                policy:
+                  product.warrantyPolicy || "",
+
+                startsAt: null,
+                expiresAt: null,
+              },
             },
 
             // Legacy fields retained for compatibility.

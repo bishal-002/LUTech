@@ -9,6 +9,52 @@ const roundMoney = (value) =>
   Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 
 // ---------------------------------------------
+// Historical warranty snapshot
+// ---------------------------------------------
+
+const productWarrantySnapshotSchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    duration: {
+      value: {
+        type: Number,
+        min: 1,
+        default: null,
+      },
+
+      unit: {
+        type: String,
+        enum: ["Days", "Months", "Years", "Lifetime"],
+        default: "Months",
+      },
+    },
+
+    policy: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+      default: "",
+    },
+
+    startsAt: {
+      type: Date,
+      default: null,
+    },
+
+    expiresAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { _id: false }
+);
+
+// ---------------------------------------------
 // Historical product snapshot
 // ---------------------------------------------
 
@@ -47,6 +93,13 @@ const productSnapshotSchema = new mongoose.Schema(
     condition: {
       type: String,
       default: "new_sealed",
+    },
+
+    // Warranty terms are saved at purchase time.
+    // Warranty dates are filled when the order is delivered.
+    warranty: {
+      type: productWarrantySnapshotSchema,
+      default: undefined,
     },
   },
   { _id: false }
