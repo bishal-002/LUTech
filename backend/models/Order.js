@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 
 // ---------------------------------------------
@@ -236,9 +237,38 @@ const orderSchema = new mongoose.Schema(
       select: false,
     },
 
+    // -----------------------------------------
+    // DELIVERY INFORMATION
+    // -----------------------------------------
+
     deliveredAt: {
       type: Date,
       default: null,
+    },
+
+    // -----------------------------------------
+    // REFUSED COD INFORMATION
+    // -----------------------------------------
+
+    refusedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // The seller or administrator who recorded
+    // the customer refusal.
+    refusalRecordedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    // Optional internal delivery/refusal note.
+    refusalNote: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: "",
     },
 
     // -----------------------------------------
@@ -271,6 +301,7 @@ const orderSchema = new mongoose.Schema(
         "processing",
         "shipped",
         "delivered",
+        "refused",
         "cancelled",
       ],
       default: "pending",

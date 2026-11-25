@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 
 const Order = require("../models/Order");
@@ -12,6 +13,49 @@ const {
 const {
   createCustomerOrder,
 } = require("./checkoutController");
+
+// ======================================================
+// ORDER STATUS ERRORS
+// ======================================================
+
+const createOrderStatusError = (
+  message,
+  statusCode = 400
+) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+// ======================================================
+// REFUSAL NOTE VALIDATION
+// ======================================================
+
+const normalizeRefusalNote = (status, value) => {
+  if (status !== "refused") {
+    return "";
+  }
+
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  if (typeof value !== "string") {
+    throw createOrderStatusError(
+      "Refusal note must be text."
+    );
+  }
+
+  const note = value.trim();
+
+  if (note.length > 500) {
+    throw createOrderStatusError(
+      "Refusal note cannot exceed 500 characters."
+    );
+  }
+
+  return note;
+};
 
 // ======================================================
 // GET SELLER ORDERS
@@ -77,13 +121,19 @@ const getSellerOrderById = async (req, res) => {
 // CHANGE ORDER STATUS
 // ======================================================
 
-const changeOrderStatus = async (order, status) => {
+const changeOrderStatus = async (
+  order,
+  status,
+  actor = null,
+  refusalNote = ""
+) => {
   const transitions = {
     pending: ["confirmed", "cancelled"],
     confirmed: ["processing", "cancelled"],
     processing: ["shipped", "cancelled"],
-    shipped: ["delivered"],
+    shipped: ["delivered", "refused"],
     delivered: [],
+    refused: [],
     cancelled: [],
   };
 
@@ -137,8 +187,9 @@ const changeOrderStatus = async (order, status) => {
               item.name ||
               "an order item";
 
-            throw new Error(
-              `Unable to restore inventory for ${itemName}. The order was not cancelled.`
+            throw createOrderStatusError(
+              `Unable to restore inventory for ${itemName}. The order was not cancelled.`,
+              409
             );
           }
         }
@@ -179,7 +230,8 @@ const changeOrderStatus = async (order, status) => {
       transitionAllowed = false;
       updatedOrder = null;
 
-      // Load hidden financial snapshots explicitly.
+      // Always load the latest order state inside
+      // the transaction to prevent duplicate updates.
       const currentOrder = await Order.findById(
         order._id
       )
@@ -201,7 +253,35 @@ const changeOrderStatus = async (order, status) => {
         return;
       }
 
-      // Update order lifecycle.
+      // ------------------------------------------------
+      // REFUSED COD VALIDATION
+      // ------------------------------------------------
+
+      if (status === "refused") {
+        if (currentOrder.paymentMethod !== "COD") {
+          throw createOrderStatusError(
+            "Only Cash on Delivery orders can be marked as refused."
+          );
+        }
+
+        if (currentOrder.paymentStatus !== "pending") {
+          throw createOrderStatusError(
+            "Only unpaid COD orders can be marked as refused."
+          );
+        }
+
+        if (!currentOrder.customerId) {
+          throw createOrderStatusError(
+            "The order has no associated customer.",
+            409
+          );
+        }
+      }
+
+      // ------------------------------------------------
+      // UPDATE ORDER LIFECYCLE
+      // ------------------------------------------------
+
       currentOrder.status = status;
 
       if (status === "delivered") {
@@ -210,6 +290,22 @@ const changeOrderStatus = async (order, status) => {
         if (currentOrder.paymentMethod === "COD") {
           currentOrder.paymentStatus = "paid";
         }
+      }
+
+      if (status === "refused") {
+        currentOrder.refusedAt = new Date();
+
+        currentOrder.refusalRecordedBy =
+          actor?._id || null;
+
+        currentOrder.refusalNote = refusalNote;
+
+        // IMPORTANT:
+        // Do not restore inventory here. The parcel may
+        // still be with the delivery/courier service.
+        // Inventory should only be restored after the
+        // returned parcel is physically received and
+        // inspected through a separate return process.
       }
 
       await currentOrder.save({ session });
@@ -230,7 +326,7 @@ const changeOrderStatus = async (order, status) => {
       }
 
       // ------------------------------------------------
-      // UPDATE CUSTOMER AND SELLER METRICS
+      // UPDATE CUSTOMER AND SELLER METRICS: DELIVERED
       // ------------------------------------------------
 
       if (status === "delivered") {
@@ -249,8 +345,9 @@ const changeOrderStatus = async (order, status) => {
         );
 
         if (customerUpdate.matchedCount !== 1) {
-          throw new Error(
-            "Customer account not found. Customer metrics could not be updated."
+          throw createOrderStatusError(
+            "Customer account not found. Customer metrics could not be updated.",
+            409
           );
         }
 
@@ -268,12 +365,41 @@ const changeOrderStatus = async (order, status) => {
         );
 
         if (sellerUpdate.matchedCount !== 1) {
-          throw new Error(
-            "Seller account not found. Seller metrics could not be updated."
+          throw createOrderStatusError(
+            "Seller account not found. Seller metrics could not be updated.",
+            409
           );
         }
       }
 
+      // ------------------------------------------------
+      // UPDATE CUSTOMER METRIC: REFUSED COD
+      // ------------------------------------------------
+
+      if (status === "refused") {
+        const refusalMetricUpdate = await User.updateOne(
+          {
+            _id: currentOrder.customerId,
+            role: "customer",
+          },
+          {
+            $inc: {
+              "customerMetrics.refusedCodOrders": 1,
+            },
+          },
+          { session }
+        );
+
+        if (refusalMetricUpdate.matchedCount !== 1) {
+          throw createOrderStatusError(
+            "Customer account not found. Refused COD metric could not be updated.",
+            409
+          );
+        }
+      }
+
+      // The order status and the customer metric are
+      // committed together by this transaction.
       transitionAllowed = true;
       updatedOrder = currentOrder;
     });
@@ -286,6 +412,10 @@ const changeOrderStatus = async (order, status) => {
     order.status = updatedOrder.status;
     order.paymentStatus = updatedOrder.paymentStatus;
     order.deliveredAt = updatedOrder.deliveredAt;
+    order.refusedAt = updatedOrder.refusedAt;
+    order.refusalRecordedBy =
+      updatedOrder.refusalRecordedBy;
+    order.refusalNote = updatedOrder.refusalNote;
     order.updatedAt = updatedOrder.updatedAt;
 
     return true;
@@ -313,6 +443,7 @@ const updateSellerOrderStatus = async (req, res) => {
       "processing",
       "shipped",
       "delivered",
+      "refused",
       "cancelled",
     ];
 
@@ -321,6 +452,11 @@ const updateSellerOrderStatus = async (req, res) => {
         message: "Invalid order status.",
       });
     }
+
+    const refusalNote = normalizeRefusalNote(
+      status,
+      req.body.refusalNote
+    );
 
     const order = await Order.findOne({
       _id: req.params.id,
@@ -335,7 +471,9 @@ const updateSellerOrderStatus = async (req, res) => {
 
     const updated = await changeOrderStatus(
       order,
-      status
+      status,
+      req.user,
+      refusalNote
     );
 
     if (!updated) {
@@ -346,13 +484,16 @@ const updateSellerOrderStatus = async (req, res) => {
     }
 
     return res.status(200).json({
-      message: "Order status updated.",
+      message:
+        status === "refused"
+          ? "COD order marked as refused. Customer metric updated."
+          : "Order status updated.",
       order,
     });
   } catch (error) {
     console.error("Update seller order:", error);
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       message:
         error.message || "Unable to update order.",
     });
@@ -529,6 +670,7 @@ const updateAdminOrderStatus = async (req, res) => {
       "processing",
       "shipped",
       "delivered",
+      "refused",
       "cancelled",
     ];
 
@@ -537,6 +679,11 @@ const updateAdminOrderStatus = async (req, res) => {
         message: "Invalid order status.",
       });
     }
+
+    const refusalNote = normalizeRefusalNote(
+      status,
+      req.body.refusalNote
+    );
 
     const order = await Order.findById(
       req.params.id
@@ -550,7 +697,9 @@ const updateAdminOrderStatus = async (req, res) => {
 
     const updated = await changeOrderStatus(
       order,
-      status
+      status,
+      req.user,
+      refusalNote
     );
 
     if (!updated) {
@@ -561,13 +710,16 @@ const updateAdminOrderStatus = async (req, res) => {
     }
 
     return res.status(200).json({
-      message: "Order status updated.",
+      message:
+        status === "refused"
+          ? "COD order marked as refused. Customer metric updated."
+          : "Order status updated.",
       order,
     });
   } catch (error) {
     console.error("Update admin order:", error);
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       message:
         error.message || "Unable to update order.",
     });
