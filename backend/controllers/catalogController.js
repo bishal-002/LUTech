@@ -1,15 +1,25 @@
+
 const mongoose = require("mongoose");
+
 const Brand = require("../models/Brand");
 const Category = require("../models/Category");
+
+const {
+  writeAuditLog,
+} = require("../services/auditLogService");
 
 // ======================================================
 // HELPERS
 // ======================================================
 
-const isValidId = (id) => mongoose.isValidObjectId(id);
+const isValidId = (id) =>
+  mongoose.isValidObjectId(id);
 
 const hasOwn = (object, key) =>
-  Object.prototype.hasOwnProperty.call(object, key);
+  Object.prototype.hasOwnProperty.call(
+    object,
+    key
+  );
 
 const createSlug = (value) =>
   String(value || "")
@@ -19,11 +29,15 @@ const createSlug = (value) =>
     .replace(/^-+|-+$/g, "");
 
 const handleCatalogError = (res, error) => {
-  console.error("Catalog Controller Error:", error);
+  console.error(
+    "Catalog Controller Error:",
+    error
+  );
 
   if (error.code === 11000) {
     return res.status(409).json({
-      message: "A record with this name or slug already exists.",
+      message:
+        "A record with this name or slug already exists.",
     });
   }
 
@@ -38,12 +52,19 @@ const handleCatalogError = (res, error) => {
   }
 
   return res.status(500).json({
-    message: "Unable to process catalog request.",
+    message:
+      "Unable to process catalog request.",
   });
 };
 
-const validateStringFields = (body, fields, res) => {
-  for (const [field, maxLength] of Object.entries(fields)) {
+const validateStringFields = (
+  body,
+  fields,
+  res
+) => {
+  for (const [field, maxLength] of Object.entries(
+    fields
+  )) {
     if (
       body[field] !== undefined &&
       (
@@ -52,7 +73,8 @@ const validateStringFields = (body, fields, res) => {
       )
     ) {
       res.status(400).json({
-        message: `${field} must be valid text with a maximum of ${maxLength} characters.`,
+        message:
+          `${field} must be valid text with a maximum of ${maxLength} characters.`,
       });
 
       return false;
@@ -62,14 +84,19 @@ const validateStringFields = (body, fields, res) => {
   return true;
 };
 
-const validateBooleanFields = (body, fields, res) => {
+const validateBooleanFields = (
+  body,
+  fields,
+  res
+) => {
   for (const field of fields) {
     if (
       body[field] !== undefined &&
       typeof body[field] !== "boolean"
     ) {
       res.status(400).json({
-        message: `${field} must be true or false.`,
+        message:
+          `${field} must be true or false.`,
       });
 
       return false;
@@ -77,6 +104,61 @@ const validateBooleanFields = (body, fields, res) => {
   }
 
   return true;
+};
+
+// ======================================================
+// CATEGORY SCHEMA AUDIT HELPERS
+// ======================================================
+
+// Convert Mongoose subdocuments into stable plain objects.
+// Only schema configuration fields are recorded.
+
+const getSpecificationTemplateSnapshot = (
+  template
+) => {
+  if (!Array.isArray(template)) {
+    return [];
+  }
+
+  return template.map((field) => {
+    const item = field?.toObject
+      ? field.toObject()
+      : field || {};
+
+    return {
+      group: item.group || "",
+      key: item.key || "",
+      label: item.label || "",
+      inputType: item.inputType || "text",
+
+      options: Array.isArray(item.options)
+        ? [...item.options]
+        : [],
+
+      unit: item.unit || "",
+      required: item.required === true,
+      filterable: item.filterable === true,
+
+      displayOrder:
+        Number.isInteger(item.displayOrder)
+          ? item.displayOrder
+          : 0,
+    };
+  });
+};
+
+const areSpecificationTemplatesEqual = (
+  first,
+  second
+) => {
+  return (
+    JSON.stringify(
+      getSpecificationTemplateSnapshot(first)
+    ) ===
+    JSON.stringify(
+      getSpecificationTemplateSnapshot(second)
+    )
+  );
 };
 
 // ======================================================
@@ -119,7 +201,9 @@ const getBrandById = async (req, res) => {
       });
     }
 
-    return res.status(200).json({ brand });
+    return res.status(200).json({
+      brand,
+    });
   } catch (error) {
     return handleCatalogError(res, error);
   }
@@ -177,7 +261,11 @@ const createBrand = async (req, res) => {
       ) ||
       !validateBooleanFields(
         req.body,
-        ["isVerified", "isActive", "isGeneric"],
+        [
+          "isVerified",
+          "isActive",
+          "isGeneric",
+        ],
         res
       )
     ) {
@@ -188,12 +276,16 @@ const createBrand = async (req, res) => {
       name: name.trim(),
     };
 
-    if (slug !== undefined && slug.trim()) {
+    if (
+      slug !== undefined &&
+      slug.trim()
+    ) {
       brandData.slug = slug.trim();
     }
 
     if (description !== undefined) {
-      brandData.description = description.trim();
+      brandData.description =
+        description.trim();
     }
 
     if (logo !== undefined) {
@@ -231,7 +323,9 @@ const updateBrand = async (req, res) => {
       });
     }
 
-    const brand = await Brand.findById(req.params.id);
+    const brand = await Brand.findById(
+      req.params.id
+    );
 
     if (!brand) {
       return res.status(404).json({
@@ -247,10 +341,18 @@ const updateBrand = async (req, res) => {
     };
 
     if (
-      !validateStringFields(req.body, stringFields, res) ||
+      !validateStringFields(
+        req.body,
+        stringFields,
+        res
+      ) ||
       !validateBooleanFields(
         req.body,
-        ["isVerified", "isActive", "isGeneric"],
+        [
+          "isVerified",
+          "isActive",
+          "isGeneric",
+        ],
         res
       )
     ) {
@@ -277,7 +379,8 @@ const updateBrand = async (req, res) => {
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({
-        message: "No valid brand fields provided.",
+        message:
+          "No valid brand fields provided.",
       });
     }
 
@@ -286,12 +389,15 @@ const updateBrand = async (req, res) => {
 
       if (!updates.name) {
         return res.status(400).json({
-          message: "Brand name cannot be empty.",
+          message:
+            "Brand name cannot be empty.",
         });
       }
 
       if (updates.slug === undefined) {
-        updates.slug = createSlug(updates.name);
+        updates.slug = createSlug(
+          updates.name
+        );
       }
     }
 
@@ -300,13 +406,15 @@ const updateBrand = async (req, res) => {
 
       if (!updates.slug) {
         return res.status(400).json({
-          message: "Brand slug cannot be empty.",
+          message:
+            "Brand slug cannot be empty.",
         });
       }
     }
 
     if (updates.description !== undefined) {
-      updates.description = updates.description.trim();
+      updates.description =
+        updates.description.trim();
     }
 
     if (updates.logo !== undefined) {
@@ -334,7 +442,9 @@ const deactivateBrand = async (req, res) => {
       });
     }
 
-    const brand = await Brand.findById(req.params.id);
+    const brand = await Brand.findById(
+      req.params.id
+    );
 
     if (!brand) {
       return res.status(404).json({
@@ -343,6 +453,7 @@ const deactivateBrand = async (req, res) => {
     }
 
     brand.isActive = false;
+
     await brand.save();
 
     return res.status(200).json({
@@ -362,8 +473,15 @@ const getCategories = async (req, res) => {
     const categories = await Category.find({
       isActive: true,
     })
-      .populate("parentCategory", "name slug")
-      .sort({ level: 1, sortOrder: 1, name: 1 })
+      .populate(
+        "parentCategory",
+        "name slug"
+      )
+      .sort({
+        level: 1,
+        sortOrder: 1,
+        name: 1,
+      })
       .lean();
 
     return res.status(200).json({
@@ -387,7 +505,10 @@ const getCategoryById = async (req, res) => {
       _id: req.params.id,
       isActive: true,
     })
-      .populate("parentCategory", "name slug")
+      .populate(
+        "parentCategory",
+        "name slug"
+      )
       .lean();
 
     if (!category) {
@@ -396,7 +517,9 @@ const getCategoryById = async (req, res) => {
       });
     }
 
-    return res.status(200).json({ category });
+    return res.status(200).json({
+      category,
+    });
   } catch (error) {
     return handleCatalogError(res, error);
   }
@@ -406,11 +529,21 @@ const getCategoryById = async (req, res) => {
 // CATEGORY: ADMIN
 // ======================================================
 
-const getAllCategoriesAdmin = async (req, res) => {
+const getAllCategoriesAdmin = async (
+  req,
+  res
+) => {
   try {
     const categories = await Category.find()
-      .populate("parentCategory", "name slug")
-      .sort({ level: 1, sortOrder: 1, name: 1 })
+      .populate(
+        "parentCategory",
+        "name slug"
+      )
+      .sort({
+        level: 1,
+        sortOrder: 1,
+        name: 1,
+      })
       .lean();
 
     return res.status(200).json({
@@ -422,7 +555,14 @@ const getAllCategoriesAdmin = async (req, res) => {
   }
 };
 
+// ======================================================
+// CREATE CATEGORY
+// POST /api/catalog/categories
+// ======================================================
+
 const createCategory = async (req, res) => {
+  let session = null;
+
   try {
     const {
       name,
@@ -454,17 +594,25 @@ const createCategory = async (req, res) => {
         },
         res
       ) ||
-      !validateBooleanFields(req.body, ["isActive"], res)
+      !validateBooleanFields(
+        req.body,
+        ["isActive"],
+        res
+      )
     ) {
       return;
     }
 
     if (
       sortOrder !== undefined &&
-      (!Number.isInteger(sortOrder) || sortOrder < 0)
+      (
+        !Number.isInteger(sortOrder) ||
+        sortOrder < 0
+      )
     ) {
       return res.status(400).json({
-        message: "Sort order must be a non-negative integer.",
+        message:
+          "Sort order must be a non-negative integer.",
       });
     }
 
@@ -473,63 +621,162 @@ const createCategory = async (req, res) => {
       !Array.isArray(specificationTemplate)
     ) {
       return res.status(400).json({
-        message: "Specification template must be an array.",
+        message:
+          "Specification template must be an array.",
       });
     }
 
-    let parentId = null;
+    const schemaWasSubmitted = hasOwn(
+      req.body,
+      "specificationTemplate"
+    );
 
-    if (parentCategory) {
-      if (!isValidId(parentCategory)) {
-        return res.status(400).json({
-          message: "Invalid parent category ID.",
-        });
+    const createCategoryRecord = async (
+      activeSession = null
+    ) => {
+      let parentId = null;
+
+      if (parentCategory) {
+        if (!isValidId(parentCategory)) {
+          const error = new Error(
+            "Invalid parent category ID."
+          );
+
+          error.statusCode = 400;
+          throw error;
+        }
+
+        let parentQuery = Category.findOne({
+          _id: parentCategory,
+          isActive: true,
+        }).select("_id");
+
+        if (activeSession) {
+          parentQuery =
+            parentQuery.session(activeSession);
+        }
+
+        const parent = await parentQuery;
+
+        if (!parent) {
+          const error = new Error(
+            "Parent category does not exist or is inactive."
+          );
+
+          error.statusCode = 400;
+          throw error;
+        }
+
+        parentId = parent._id;
       }
 
-      const parent = await Category.findOne({
-        _id: parentCategory,
-        isActive: true,
-      }).select("_id");
+      const categoryData = {
+        name: name.trim(),
+        parentCategory: parentId,
+      };
 
-      if (!parent) {
-        return res.status(400).json({
-          message: "Parent category does not exist or is inactive.",
-        });
+      if (
+        slug !== undefined &&
+        slug.trim()
+      ) {
+        categoryData.slug = slug.trim();
       }
 
-      parentId = parent._id;
-    }
+      if (description !== undefined) {
+        categoryData.description =
+          description.trim();
+      }
 
-    const categoryData = {
-      name: name.trim(),
-      parentCategory: parentId,
+      if (image !== undefined) {
+        categoryData.image = image.trim();
+      }
+
+      if (
+        specificationTemplate !== undefined
+      ) {
+        categoryData.specificationTemplate =
+          specificationTemplate;
+      }
+
+      if (isActive !== undefined) {
+        categoryData.isActive = isActive;
+      }
+
+      if (sortOrder !== undefined) {
+        categoryData.sortOrder = sortOrder;
+      }
+
+      let category;
+
+      if (activeSession) {
+        const createdCategories =
+          await Category.create(
+            [categoryData],
+            {
+              session: activeSession,
+            }
+          );
+
+        category = createdCategories[0];
+      } else {
+        category = await Category.create(
+          categoryData
+        );
+      }
+
+      // A newly created non-empty schema is also
+      // an auditable schema event.
+      if (schemaWasSubmitted) {
+        const afterTemplate =
+          getSpecificationTemplateSnapshot(
+            category.specificationTemplate
+          );
+
+        if (afterTemplate.length > 0) {
+          await writeAuditLog({
+            adminId: req.user._id,
+
+            action:
+              "CATEGORY_SCHEMA_UPDATED",
+
+            targetType: "Category",
+
+            targetId: category._id,
+
+            changes: {
+              before: {
+                specificationTemplate: null,
+              },
+
+              after: {
+                specificationTemplate:
+                  afterTemplate,
+              },
+            },
+
+            session: activeSession,
+          });
+        }
+      }
+
+      return category;
     };
 
-    if (slug !== undefined && slug.trim()) {
-      categoryData.slug = slug.trim();
-    }
+    let category;
 
-    if (description !== undefined) {
-      categoryData.description = description.trim();
-    }
+    // Creating a category and its initial schema
+    // must be atomic with its audit record.
+    if (schemaWasSubmitted) {
+      session = await mongoose.startSession();
 
-    if (image !== undefined) {
-      categoryData.image = image.trim();
+      await session.withTransaction(async () => {
+        category =
+          await createCategoryRecord(session);
+      });
+    } else {
+      category =
+        await createCategoryRecord();
     }
-
-    if (specificationTemplate !== undefined) {
-      categoryData.specificationTemplate = specificationTemplate;
-    }
-
-    if (isActive !== undefined) {
-      categoryData.isActive = isActive;
-    }
-
-    if (sortOrder !== undefined) {
-      categoryData.sortOrder = sortOrder;
-    }
-
-    const category = await Category.create(categoryData);
 
     return res.status(201).json({
       message: "Category created successfully.",
@@ -537,10 +784,21 @@ const createCategory = async (req, res) => {
     });
   } catch (error) {
     return handleCatalogError(res, error);
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 };
 
+// ======================================================
+// UPDATE CATEGORY
+// PUT /api/catalog/categories/:id
+// ======================================================
+
 const updateCategory = async (req, res) => {
+  let session = null;
+
   try {
     if (!isValidId(req.params.id)) {
       return res.status(400).json({
@@ -548,149 +806,308 @@ const updateCategory = async (req, res) => {
       });
     }
 
-    const category = await Category.findById(req.params.id);
+    const schemaWasSubmitted = hasOwn(
+      req.body,
+      "specificationTemplate"
+    );
 
-    if (!category) {
-      return res.status(404).json({
-        message: "Category not found.",
+    const performCategoryUpdate = async (
+      activeSession = null
+    ) => {
+      let categoryQuery = Category.findById(
+        req.params.id
+      );
+
+      if (activeSession) {
+        categoryQuery =
+          categoryQuery.session(activeSession);
+      }
+
+      const category = await categoryQuery;
+
+      if (!category) {
+        const error = new Error(
+          "Category not found."
+        );
+
+        error.statusCode = 404;
+        throw error;
+      }
+
+      if (
+        !validateStringFields(
+          req.body,
+          {
+            name: 80,
+            slug: 100,
+            description: 500,
+            image: 2048,
+          },
+          res
+        ) ||
+        !validateBooleanFields(
+          req.body,
+          ["isActive"],
+          res
+        )
+      ) {
+        return null;
+      }
+
+      const allowedFields = [
+        "name",
+        "slug",
+        "description",
+        "image",
+        "specificationTemplate",
+        "isActive",
+        "sortOrder",
+      ];
+
+      const updates = {};
+
+      for (const field of allowedFields) {
+        if (hasOwn(req.body, field)) {
+          updates[field] = req.body[field];
+        }
+      }
+
+      if (hasOwn(req.body, "parentCategory")) {
+        const parentCategory =
+          req.body.parentCategory;
+
+        if (!parentCategory) {
+          updates.parentCategory = null;
+        } else {
+          if (!isValidId(parentCategory)) {
+            const error = new Error(
+              "Invalid parent category ID."
+            );
+
+            error.statusCode = 400;
+            throw error;
+          }
+
+          if (
+            parentCategory.toString() ===
+            category._id.toString()
+          ) {
+            const error = new Error(
+              "A category cannot be its own parent."
+            );
+
+            error.statusCode = 400;
+            throw error;
+          }
+
+          let parentQuery = Category.findOne({
+            _id: parentCategory,
+            isActive: true,
+          }).select("_id");
+
+          if (activeSession) {
+            parentQuery =
+              parentQuery.session(activeSession);
+          }
+
+          const parent = await parentQuery;
+
+          if (!parent) {
+            const error = new Error(
+              "Parent category does not exist or is inactive."
+            );
+
+            error.statusCode = 400;
+            throw error;
+          }
+
+          updates.parentCategory = parent._id;
+        }
+      }
+
+      if (
+        updates.sortOrder !== undefined &&
+        (
+          !Number.isInteger(updates.sortOrder) ||
+          updates.sortOrder < 0
+        )
+      ) {
+        const error = new Error(
+          "Sort order must be a non-negative integer."
+        );
+
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (
+        updates.specificationTemplate !==
+          undefined &&
+        !Array.isArray(
+          updates.specificationTemplate
+        )
+      ) {
+        const error = new Error(
+          "Specification template must be an array."
+        );
+
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (updates.name !== undefined) {
+        updates.name = updates.name.trim();
+
+        if (!updates.name) {
+          const error = new Error(
+            "Category name cannot be empty."
+          );
+
+          error.statusCode = 400;
+          throw error;
+        }
+
+        if (updates.slug === undefined) {
+          updates.slug = createSlug(
+            updates.name
+          );
+        }
+      }
+
+      if (updates.slug !== undefined) {
+        updates.slug = updates.slug.trim();
+
+        if (!updates.slug) {
+          const error = new Error(
+            "Category slug cannot be empty."
+          );
+
+          error.statusCode = 400;
+          throw error;
+        }
+      }
+
+      if (updates.description !== undefined) {
+        updates.description =
+          updates.description.trim();
+      }
+
+      if (updates.image !== undefined) {
+        updates.image = updates.image.trim();
+      }
+
+      if (Object.keys(updates).length === 0) {
+        const error = new Error(
+          "No valid category fields provided."
+        );
+
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Capture the original schema before applying
+      // any modifications.
+      const beforeTemplate =
+        getSpecificationTemplateSnapshot(
+          category.specificationTemplate
+        );
+
+      category.set(updates);
+
+      if (activeSession) {
+        await category.save({
+          session: activeSession,
+        });
+      } else {
+        await category.save();
+      }
+
+      // Capture the final, persisted schema.
+      const afterTemplate =
+        getSpecificationTemplateSnapshot(
+          category.specificationTemplate
+        );
+
+      // Do not create an audit log for an unchanged
+      // schema or for ordinary category edits.
+      const schemaActuallyChanged =
+        schemaWasSubmitted &&
+        !areSpecificationTemplatesEqual(
+          beforeTemplate,
+          afterTemplate
+        );
+
+      if (schemaActuallyChanged) {
+        await writeAuditLog({
+          adminId: req.user._id,
+
+          action:
+            "CATEGORY_SCHEMA_UPDATED",
+
+          targetType: "Category",
+
+          targetId: category._id,
+
+          changes: {
+            before: {
+              specificationTemplate:
+                beforeTemplate,
+            },
+
+            after: {
+              specificationTemplate:
+                afterTemplate,
+            },
+          },
+
+          session: activeSession,
+        });
+      }
+
+      return category;
+    };
+
+    let updatedCategory;
+
+    // If the schema is part of the request, save the
+    // category and audit entry in one transaction.
+    if (schemaWasSubmitted) {
+      session = await mongoose.startSession();
+
+      await session.withTransaction(async () => {
+        updatedCategory =
+          await performCategoryUpdate(session);
       });
+    } else {
+      updatedCategory =
+        await performCategoryUpdate();
     }
 
-    if (
-      !validateStringFields(
-        req.body,
-        {
-          name: 80,
-          slug: 100,
-          description: 500,
-          image: 2048,
-        },
-        res
-      ) ||
-      !validateBooleanFields(req.body, ["isActive"], res)
-    ) {
+    // Validation helpers may already have sent a response.
+    if (!updatedCategory) {
       return;
     }
 
-    const allowedFields = [
-      "name",
-      "slug",
-      "description",
-      "image",
-      "specificationTemplate",
-      "isActive",
-      "sortOrder",
-    ];
-
-    const updates = {};
-
-    for (const field of allowedFields) {
-      if (hasOwn(req.body, field)) {
-        updates[field] = req.body[field];
-      }
-    }
-
-    if (hasOwn(req.body, "parentCategory")) {
-      const parentCategory = req.body.parentCategory;
-
-      if (!parentCategory) {
-        updates.parentCategory = null;
-      } else {
-        if (!isValidId(parentCategory)) {
-          return res.status(400).json({
-            message: "Invalid parent category ID.",
-          });
-        }
-
-        if (parentCategory.toString() === category._id.toString()) {
-          return res.status(400).json({
-            message: "A category cannot be its own parent.",
-          });
-        }
-
-        const parent = await Category.findOne({
-          _id: parentCategory,
-          isActive: true,
-        }).select("_id");
-
-        if (!parent) {
-          return res.status(400).json({
-            message: "Parent category does not exist or is inactive.",
-          });
-        }
-
-        updates.parentCategory = parent._id;
-      }
-    }
-
-    if (
-      updates.sortOrder !== undefined &&
-      (!Number.isInteger(updates.sortOrder) || updates.sortOrder < 0)
-    ) {
-      return res.status(400).json({
-        message: "Sort order must be a non-negative integer.",
-      });
-    }
-
-    if (
-      updates.specificationTemplate !== undefined &&
-      !Array.isArray(updates.specificationTemplate)
-    ) {
-      return res.status(400).json({
-        message: "Specification template must be an array.",
-      });
-    }
-
-    if (updates.name !== undefined) {
-      updates.name = updates.name.trim();
-
-      if (!updates.name) {
-        return res.status(400).json({
-          message: "Category name cannot be empty.",
-        });
-      }
-
-      if (updates.slug === undefined) {
-        updates.slug = createSlug(updates.name);
-      }
-    }
-
-    if (updates.slug !== undefined) {
-      updates.slug = updates.slug.trim();
-
-      if (!updates.slug) {
-        return res.status(400).json({
-          message: "Category slug cannot be empty.",
-        });
-      }
-    }
-
-    if (updates.description !== undefined) {
-      updates.description = updates.description.trim();
-    }
-
-    if (updates.image !== undefined) {
-      updates.image = updates.image.trim();
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({
-        message: "No valid category fields provided.",
-      });
-    }
-
-    category.set(updates);
-
-    await category.save();
-
     return res.status(200).json({
       message: "Category updated successfully.",
-      category,
+      category: updatedCategory,
     });
   } catch (error) {
+    if (res.headersSent) {
+      return;
+    }
+
     return handleCatalogError(res, error);
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 };
+
+// ======================================================
+// DEACTIVATE CATEGORY
+// ======================================================
 
 const deactivateCategory = async (req, res) => {
   try {
@@ -700,7 +1117,9 @@ const deactivateCategory = async (req, res) => {
       });
     }
 
-    const category = await Category.findById(req.params.id);
+    const category = await Category.findById(
+      req.params.id
+    );
 
     if (!category) {
       return res.status(404).json({
@@ -715,11 +1134,13 @@ const deactivateCategory = async (req, res) => {
 
     if (activeChildren) {
       return res.status(409).json({
-        message: "Deactivate or reassign child categories first.",
+        message:
+          "Deactivate or reassign child categories first.",
       });
     }
 
     category.isActive = false;
+
     await category.save();
 
     return res.status(200).json({
@@ -741,6 +1162,7 @@ module.exports = {
   createBrand,
   updateBrand,
   deactivateBrand,
+
   getCategories,
   getCategoryById,
   getAllCategoriesAdmin,

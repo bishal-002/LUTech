@@ -46,6 +46,41 @@ const {
 const router = express.Router();
 
 // ======================================================
+// CATEGORY SCHEMA PERMISSION
+// ======================================================
+
+// Ordinary category edits do not require the schema-edit
+// permission. Only requests containing specificationTemplate
+// must pass the dedicated permission check.
+
+const requireEditCategorySchemasPermission =
+  requireAdminPermission(
+    "edit_category_schemas"
+  );
+
+const requireSchemaPermissionWhenPresent = (
+  req,
+  res,
+  next
+) => {
+  const schemaWasSubmitted =
+    Object.prototype.hasOwnProperty.call(
+      req.body || {},
+      "specificationTemplate"
+    );
+
+  if (!schemaWasSubmitted) {
+    return next();
+  }
+
+  return requireEditCategorySchemasPermission(
+    req,
+    res,
+    next
+  );
+};
+
+// ======================================================
 // SELLER MASTER BRAND ROUTE
 // ======================================================
 
@@ -60,7 +95,10 @@ router.get(
 // PUBLIC BRAND ROUTES
 // ======================================================
 
-router.get("/brands", getBrands);
+router.get(
+  "/brands",
+  getBrands
+);
 
 router.get(
   "/brands/:id",
@@ -172,18 +210,28 @@ router.delete(
 // ADMIN CATEGORY MANAGEMENT
 // ======================================================
 
+// Create category.
+// If a specification template is submitted,
+// edit_category_schemas permission is required.
+
 router.post(
   "/categories",
   protect,
   adminOnly,
+  requireSchemaPermissionWhenPresent,
   validateCategorySpecificationTemplate,
   createCategory
 );
+
+// Update category.
+// Ordinary category fields retain the existing behavior.
+// Schema changes require edit_category_schemas.
 
 router.put(
   "/categories/:id",
   protect,
   adminOnly,
+  requireSchemaPermissionWhenPresent,
   validateCategorySpecificationTemplate,
   updateCategory
 );
