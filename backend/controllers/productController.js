@@ -4,6 +4,10 @@ const Product = require("../models/Product");
 const Brand = require("../models/Brand");
 const Category = require("../models/Category");
 
+const {
+  notifyProductChanges,
+} = require("../services/productNotificationService");
+
 // ======================================================
 // CONFIGURATION
 // ======================================================
@@ -481,7 +485,7 @@ const getProductById = async (req, res) => {
         { moderationStatus: "approved" },
         { moderationStatus: { $exists: false } },
       ],
-    })
+    });
 
     if (!product) {
       return res.status(404).json({
@@ -531,7 +535,10 @@ const updateProduct = async (req, res) => {
       });
     }
 
-    // Prevent accidental ownership changes.
+    // Save the existing product state before applying changes.
+    // This is used to detect price drops and restocks.
+    const previousProduct = product.toObject();
+
     // Prevent accidental ownership changes.
     delete updateData.sellerId;
     delete updateData.seller;
@@ -566,12 +573,23 @@ const updateProduct = async (req, res) => {
 
     product.set(updateData);
 
-    const updatedProduct = await product.save();
+    const updatedProduct = await product.save({
+      validateModifiedOnly: true,
+    });
+
+    // Run notifications only after the product is saved.
+    // Notification failures must never undo a valid product update.
+    const notificationResults =
+      await notifyProductChanges(
+        previousProduct,
+        updatedProduct
+      );
 
     return res.status(200).json({
       success: true,
       message: "Product updated successfully.",
       product: updatedProduct,
+      notifications: notificationResults,
     });
   } catch (error) {
     return handleProductError(res, error);

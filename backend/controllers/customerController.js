@@ -307,14 +307,14 @@ const updateCustomerProfile = async (req, res) => {
 
       user.address = defaultAddress
         ? [
-            defaultAddress.streetAddress,
-            defaultAddress.area,
-            defaultAddress.district,
-            defaultAddress.division,
-            defaultAddress.postalCode,
-          ]
-            .filter(Boolean)
-            .join(", ")
+          defaultAddress.streetAddress,
+          defaultAddress.area,
+          defaultAddress.district,
+          defaultAddress.division,
+          defaultAddress.postalCode,
+        ]
+          .filter(Boolean)
+          .join(", ")
         : "";
     }
 
@@ -364,6 +364,7 @@ const updateCustomerProfile = async (req, res) => {
       const allowedPreferences = [
         "orderUpdatesSms",
         "priceDropEmails",
+        "restockEmails",
         "warrantyExpiryReminders",
       ];
 

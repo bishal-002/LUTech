@@ -9,6 +9,10 @@ const {
   createPayoutForDeliveredOrder,
 } = require("../services/payoutService");
 
+const {
+  notifyRestockEvents,
+} = require("../services/productNotificationService");
+
 // Keep the existing controller export compatible.
 const {
   createCustomerOrder,
@@ -146,11 +150,13 @@ const changeOrderStatus = async (
 
     let transitionAllowed = false;
     let cancelledOrder = null;
+    let restockEvents = [];
 
     try {
       await session.withTransaction(async () => {
         transitionAllowed = false;
         cancelledOrder = null;
+        restockEvents = [];
 
         const currentOrder = await Order.findById(
           order._id
@@ -164,6 +170,39 @@ const changeOrderStatus = async (
         }
 
         for (const item of currentOrder.items) {
+          // Read the current product and variant before
+          // restoring the cancelled order quantity.
+          const productBeforeRestock = await Product.findOne({
+            _id: item.productId,
+            "variants._id": item.variantId,
+          })
+            .select("title variants")
+            .session(session);
+
+          const variantBeforeRestock =
+            productBeforeRestock?.variants.id(
+              item.variantId
+            );
+
+          if (!variantBeforeRestock) {
+            const itemName =
+              item.snapshot?.title ||
+              item.name ||
+              "an order item";
+
+            throw createOrderStatusError(
+              `Unable to restore inventory for ${itemName}. The order was not cancelled.`,
+              409
+            );
+          }
+
+          const previousStock = Number(
+            variantBeforeRestock.stockQuantity || 0
+          );
+
+          const restoredStock =
+            previousStock + Number(item.quantity);
+
           const stockUpdate = await Product.updateOne(
             {
               _id: item.productId,
@@ -192,6 +231,25 @@ const changeOrderStatus = async (
               409
             );
           }
+
+          // Queue a notification event only when the
+          // variant transitions from unavailable to available.
+          if (
+            previousStock <= 0 &&
+            restoredStock > 0
+          ) {
+            restockEvents.push({
+              productId: String(item.productId),
+              productTitle:
+                productBeforeRestock.title ||
+                item.snapshot?.title ||
+                item.name ||
+                "Product",
+              variantSku:
+                variantBeforeRestock.sku,
+              availableQuantity: restoredStock,
+            });
+          }
         }
 
         currentOrder.status = "cancelled";
@@ -206,9 +264,15 @@ const changeOrderStatus = async (
         return false;
       }
 
+      // The inventory transaction has committed successfully.
       order.status = cancelledOrder.status;
       order.paymentStatus = cancelledOrder.paymentStatus;
       order.updatedAt = cancelledOrder.updatedAt;
+
+      // Send restock emails only after transaction commit.
+      // Email failures must not roll back order cancellation
+      // or restored inventory.
+      await notifyRestockEvents(restockEvents);
 
       return true;
     } finally {

@@ -77,9 +77,25 @@ const ownedDeviceSchema = new mongoose.Schema(
 
 const customerPreferencesSchema = new mongoose.Schema(
   {
-    orderUpdatesSms: { type: Boolean, default: true },
-    priceDropEmails: { type: Boolean, default: true },
-    warrantyExpiryReminders: { type: Boolean, default: true },
+    orderUpdatesSms: {
+      type: Boolean,
+      default: true,
+    },
+
+    priceDropEmails: {
+      type: Boolean,
+      default: true,
+    },
+
+    restockEmails: {
+      type: Boolean,
+      default: true,
+    },
+
+    warrantyExpiryReminders: {
+      type: Boolean,
+      default: true,
+    },
   },
   { _id: false }
 );
