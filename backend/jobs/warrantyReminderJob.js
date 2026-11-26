@@ -95,7 +95,7 @@ const claimNextReminder = async (now) => {
       },
     },
     {
-      new: true,
+      returnDocument: "after",
       sort: {
         dueAt: 1,
       },
@@ -271,7 +271,7 @@ const handleReminderFailure = async (
 
   const retryDelay = Math.min(
     15 * 60 * 1000 *
-      Math.pow(2, Math.max(0, reminder.attempts - 1)),
+    Math.pow(2, Math.max(0, reminder.attempts - 1)),
     24 * HOUR_IN_MS
   );
 
@@ -291,7 +291,7 @@ const handleReminderFailure = async (
 
   console.error(
     `Warranty reminder ${reminder._id} failed ` +
-      `(attempt ${reminder.attempts}/${MAX_ATTEMPTS}):`,
+    `(attempt ${reminder.attempts}/${MAX_ATTEMPTS}):`,
     error.message
   );
 };
@@ -380,7 +380,7 @@ const startWarrantyReminderScheduler = () => {
 
   const intervalMs =
     Number.isFinite(configuredInterval) &&
-    configuredInterval >= 60 * 1000
+      configuredInterval >= 60 * 1000
       ? configuredInterval
       : HOUR_IN_MS;
 

@@ -6,7 +6,7 @@ const PlatformSettings = require("../models/PlatformSettings");
 
 const getPlatformSettings = async ({ session = null } = {}) => {
   const options = {
-    new: true,
+    returnDocument: "after",
     upsert: true,
     setDefaultsOnInsert: true,
     runValidators: true,

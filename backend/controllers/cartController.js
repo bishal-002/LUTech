@@ -85,7 +85,7 @@ const addToCart = async (req, res) => {
           $inc: { quantity },
         },
         {
-          new: true,
+          returnDocument: "after",
           runValidators: true,
         }
       );
