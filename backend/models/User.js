@@ -617,6 +617,14 @@ const userSchema = new mongoose.Schema(
       maxlength: 100,
     },
 
+    fullName: {
+      type: String,
+      trim: true,
+      minlength: 2,
+      maxlength: 80,
+      default: undefined,
+    },
+
     email: {
       type: String,
       required: true,
@@ -1045,14 +1053,6 @@ const userSchema = new mongoose.Schema(
 
 // The existing application uses name/isVerified.
 // These aliases expose the requested customer terminology.
-
-userSchema.virtual("fullName")
-  .get(function () {
-    return this.name;
-  })
-  .set(function (value) {
-    this.name = value;
-  });
 
 userSchema.virtual("isEmailVerified")
   .get(function () {

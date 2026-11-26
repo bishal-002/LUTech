@@ -1,11 +1,8 @@
-
 const mongoose = require("mongoose");
 const net = require("node:net");
-
 const User = require("../models/User");
 const AdminProfile = require("../models/AdminProfile");
 const { writeAuditLog } = require("../services/auditLogService");
-
 const {
   ADMIN_ROLES,
   ADMIN_PERMISSIONS,
@@ -24,12 +21,7 @@ const DEPARTMENTS = [
   "Engineering",
 ];
 
-const ADMIN_STATUSES = [
-  "active",
-  "suspended",
-  "revoked",
-];
-
+const ADMIN_STATUSES = ["active", "suspended", "revoked"];
 const MAX_ALLOWED_IPS = 20;
 
 // ======================================================
@@ -118,14 +110,6 @@ const ensureAnotherActiveSuperAdminExists = async (
 // PHONE NUMBER HELPERS
 // ======================================================
 
-// Accepted input examples:
-// 017XXXXXXXX
-// +88017XXXXXXXX
-// 88017XXXXXXXX
-//
-// Stored format:
-// +88017XXXXXXXX
-
 const normalizeAdminPhone = (phone) => {
   if (typeof phone !== "string") return "";
 
@@ -143,7 +127,6 @@ const normalizeAdminPhone = (phone) => {
 const isValidAdminPhone = (phone) =>
   /^\+8801[3-9]\d{8}$/.test(phone);
 
-// Mask phone numbers in audit records.
 const maskPhone = (phone) => {
   if (typeof phone !== "string" || phone.length < 8) {
     return "";
@@ -192,7 +175,6 @@ const parseIpAddress = (input) => {
 
   let normalized = address.toLowerCase();
 
-  // Convert an embedded IPv4 suffix into two IPv6 groups.
   if (normalized.includes(".")) {
     const lastColon = normalized.lastIndexOf(":");
 
@@ -259,7 +241,6 @@ const parseIpAddress = (input) => {
     0n
   );
 
-  // Normalize IPv4-mapped IPv6 addresses.
   const mapped = (value >> 32n) === 0xffffn;
 
   if (mapped) {
@@ -277,7 +258,6 @@ const parseIpAddress = (input) => {
   };
 };
 
-// Parse a single IP address or CIDR rule.
 const parseAllowedIpRule = (rule) => {
   if (typeof rule !== "string") return null;
 
@@ -304,7 +284,6 @@ const parseAllowedIpRule = (rule) => {
 
     prefix = Number(parts[1]);
 
-    // Convert mapped IPv6 prefixes to IPv4 prefixes.
     if (parsedIp.mapped) {
       if (prefix < 96) return null;
       prefix -= 96;
@@ -325,7 +304,6 @@ const parseAllowedIpRule = (rule) => {
   };
 };
 
-// Validate, normalize and remove duplicate IP rules.
 const normalizeAllowedIps = (allowedIps) => {
   if (!Array.isArray(allowedIps)) {
     throw new HttpError(
@@ -373,7 +351,6 @@ const normalizeAllowedIps = (allowedIps) => {
   return normalized;
 };
 
-// Check whether an IP belongs to a whitelist rule.
 const ipMatchesRule = (requestIp, rule) => {
   const request = parseIpAddress(requestIp);
   const network = parseAllowedIpRule(rule);
@@ -500,7 +477,6 @@ const normalizePermissions = (
     );
   }
 
-  // Super Admins must retain every available permission.
   if (adminRole === "super_admin") {
     const hasAllPermissions =
       defaultPermissions.length === requestedPermissions.length &&
@@ -516,7 +492,6 @@ const normalizePermissions = (
     }
   }
 
-  // Administrator management is reserved for Super Admins.
   if (
     adminRole !== "super_admin" &&
     requestedPermissions.includes("manage_admins")
@@ -539,7 +514,7 @@ const populateAdminProfile = (query) => {
     .select("-security.twoFactorSecretEncrypted")
     .populate({
       path: "userId",
-      select: "name email phone role status isVerified",
+      select: "name fullName email phone role status isVerified",
     });
 };
 
@@ -603,6 +578,7 @@ const getAdminProfiles = async (req, res) => {
       const matchingUsers = await User.find({
         role: "admin",
         $or: [
+          { fullName: regex },
           { name: regex },
           { email: regex },
         ],
@@ -711,6 +687,7 @@ const createAdminProfile = async (req, res) => {
 
     const {
       userId,
+      fullName,
       adminRole,
       department,
       permissions,
@@ -783,16 +760,24 @@ const createAdminProfile = async (req, res) => {
         );
       }
 
+      const finalFullName =
+        typeof fullName === "string" && fullName.trim()
+          ? fullName.trim()
+          : (user.fullName || user.name || "").trim();
+
       if (
-        typeof user.name !== "string" ||
-        user.name.trim().length < 2 ||
-        user.name.trim().length > 80
+        typeof finalFullName !== "string" ||
+        finalFullName.length < 2 ||
+        finalFullName.length > 80
       ) {
         throw new HttpError(
           400,
           "Administrator full name must be between 2 and 80 characters."
         );
       }
+
+      user.fullName = finalFullName;
+      user.name = finalFullName;
 
       const existingProfile = await AdminProfile.findOne({
         userId: user._id,
@@ -805,8 +790,6 @@ const createAdminProfile = async (req, res) => {
         );
       }
 
-      // A new phone may be supplied, or the existing User phone
-      // will be used. Administrators must have a valid phone.
       const finalPhone = normalizeAdminPhone(
         phone !== undefined ? phone : user.phone
       );
@@ -866,6 +849,7 @@ const createAdminProfile = async (req, res) => {
           before: null,
           after: {
             ...createAuditSnapshot(profile),
+            fullName: finalFullName,
             phone: maskPhone(user.phone),
           },
         },
@@ -916,6 +900,12 @@ const updateAdminProfile = async (req, res) => {
       );
     }
 
+    const hasFullName =
+      Object.prototype.hasOwnProperty.call(
+        req.body,
+        "fullName"
+      );
+
     const hasAdminRole =
       Object.prototype.hasOwnProperty.call(
         req.body,
@@ -934,7 +924,12 @@ const updateAdminProfile = async (req, res) => {
         "department"
       );
 
-    if (!hasAdminRole && !hasPermissions && !hasDepartment) {
+    if (
+      !hasFullName &&
+      !hasAdminRole &&
+      !hasPermissions &&
+      !hasDepartment
+    ) {
       throw new HttpError(
         400,
         "No valid profile fields were provided for updating."
@@ -966,7 +961,55 @@ const updateAdminProfile = async (req, res) => {
         );
       }
 
-      const before = createAuditSnapshot(profile);
+      let fullNameBefore;
+      let fullNameAfter;
+
+      if (hasFullName) {
+        if (typeof req.body.fullName !== "string") {
+          throw new HttpError(
+            400,
+            "Administrator full name must be text."
+          );
+        }
+
+        const nextFullName = req.body.fullName.trim();
+
+        if (
+          nextFullName.length < 2 ||
+          nextFullName.length > 80
+        ) {
+          throw new HttpError(
+            400,
+            "Administrator full name must be between 2 and 80 characters."
+          );
+        }
+
+        const user = await User.findById(
+          profile.userId
+        ).session(session);
+
+        if (!user) {
+          throw new HttpError(
+            404,
+            "The linked administrator user account was not found."
+          );
+        }
+
+        fullNameBefore = user.fullName || user.name || "";
+        fullNameAfter = nextFullName;
+
+        user.fullName = nextFullName;
+        user.name = nextFullName;
+
+        await user.save({ session });
+      }
+
+      const before = {
+        ...createAuditSnapshot(profile),
+        ...(hasFullName
+          ? { fullName: fullNameBefore }
+          : {}),
+      };
 
       const nextAdminRole = hasAdminRole
         ? req.body.adminRole
@@ -1038,7 +1081,12 @@ const updateAdminProfile = async (req, res) => {
         isDowngrade
       );
 
+      const fullNameChanged =
+        hasFullName &&
+        fullNameBefore !== fullNameAfter;
+
       if (
+        !fullNameChanged &&
         !roleChanged &&
         !permissionsChanged &&
         !departmentChanged
@@ -1055,7 +1103,12 @@ const updateAdminProfile = async (req, res) => {
 
       await profile.save({ session });
 
-      const after = createAuditSnapshot(profile);
+      const after = {
+        ...createAuditSnapshot(profile),
+        ...(hasFullName
+          ? { fullName: fullNameAfter }
+          : {}),
+      };
 
       let action = "ADMIN_PROFILE_UPDATED";
 
@@ -1338,16 +1391,13 @@ const updateAdminSecuritySettings = async (req, res) => {
         user._id.toString() === req.user._id.toString();
 
       const previousPhone = user.phone || "";
+
       const previousAllowedIps = [
         ...(profile.security?.allowedIps || []),
       ];
 
       let nextPhone = previousPhone;
       let nextAllowedIps = previousAllowedIps;
-
-      // -----------------------------------------------
-      // PHONE NUMBER
-      // -----------------------------------------------
 
       if (hasPhone) {
         if (typeof body.phone !== "string") {
@@ -1386,10 +1436,6 @@ const updateAdminSecuritySettings = async (req, res) => {
         }
       }
 
-      // -----------------------------------------------
-      // IP WHITELIST
-      // -----------------------------------------------
-
       if (hasAllowedIps) {
         nextAllowedIps = normalizeAllowedIps(
           body.allowedIps
@@ -1399,15 +1445,16 @@ const updateAdminSecuritySettings = async (req, res) => {
           profile.adminRole === "super_admin" ||
           profile.department === "Finance";
 
-        if (!requiresIpRestriction && nextAllowedIps.length > 0) {
+        if (
+          !requiresIpRestriction &&
+          nextAllowedIps.length > 0
+        ) {
           throw new HttpError(
             400,
             "IP restrictions can only be configured for Super Admins and Finance department administrators."
           );
         }
 
-        // Prevent a Super Admin from blocking their own
-        // current IP address when configuring their profile.
         if (
           isOwnProfile &&
           requiresIpRestriction &&
@@ -1448,7 +1495,6 @@ const updateAdminSecuritySettings = async (req, res) => {
         await profile.save({ session });
       }
 
-      // Do not include unmasked phone numbers in audit records.
       const before = {
         userId: user._id.toString(),
         phone: maskPhone(previousPhone),
