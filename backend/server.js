@@ -1,8 +1,8 @@
-
 require("dotenv").config();
 
 const dns = require("dns");
 
+// Retained from the existing LUTech backend configuration.
 dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const express = require("express");
@@ -19,12 +19,14 @@ const {
 // ROUTES
 // ======================================================
 
+// User and public routes.
 const userRoutes = require("./routes/userRoutes");
 const productRoutes = require("./routes/productRoutes");
 const cartRoutes = require("./routes/cartRoutes");
 const catalogRoutes = require("./routes/catalogRoutes");
 const testEmailRoute = require("./routes/testEmailRoute");
 
+// Admin routes.
 const adminRoutes = require("./routes/adminRoutes");
 const adminProfileRoutes = require("./routes/adminProfileRoutes");
 const adminSecurityRoutes = require("./routes/adminSecurityRoutes");
@@ -32,14 +34,21 @@ const platformSettingsRoutes = require("./routes/platformSettingsRoutes");
 const auditLogRoutes = require("./routes/auditLogRoutes");
 const productModerationRoutes = require("./routes/productModerationRoutes");
 const adminPayoutRoutes = require("./routes/adminPayoutRoutes");
+const adminDisputeRoutes = require("./routes/adminDisputeRoutes");
+const adminRefundRoutes = require("./routes/adminRefundRoutes");
 
+// Seller routes.
 const sellerRoutes = require("./routes/sellerRoutes");
 const sellerProfileRoutes = require("./routes/sellerProfileRoutes");
 const sellerKycRoutes = require("./routes/sellerKycRoutes");
 const payoutRoutes = require("./routes/payoutRoutes");
+const sellerDisputeRoutes = require("./routes/sellerDisputeRoutes");
+const sellerRecoveryRoutes = require("./routes/sellerRecoveryRoutes");
 
+// Order and customer routes.
 const orderRoutes = require("./routes/orderRoutes");
 const customerOrderRoutes = require("./routes/customerOrderRoutes");
+const disputeRoutes = require("./routes/disputeRoutes");
 
 // ======================================================
 // APPLICATION
@@ -96,13 +105,9 @@ app.get("/api/health", (req, res) => {
 // ======================================================
 
 app.use("/api/users", userRoutes);
-
 app.use("/api/products", productRoutes);
-
 app.use("/api/cart", cartRoutes);
-
 app.use("/api/catalog", catalogRoutes);
-
 app.use("/api/test-email", testEmailRoute);
 
 // ======================================================
@@ -110,77 +115,44 @@ app.use("/api/test-email", testEmailRoute);
 // Mount before the general /api/admin router.
 // ======================================================
 
-app.use(
-  "/api/admin/security",
-  adminSecurityRoutes
-);
+app.use("/api/admin/security", adminSecurityRoutes);
+app.use("/api/admin/profiles", adminProfileRoutes);
+app.use("/api/admin/platform-settings", platformSettingsRoutes);
+app.use("/api/admin/audit-logs", auditLogRoutes);
+app.use("/api/admin/products", productModerationRoutes);
+app.use("/api/admin/payouts", adminPayoutRoutes);
 
-app.use(
-  "/api/admin/profiles",
-  adminProfileRoutes
-);
-
-app.use(
-  "/api/admin/platform-settings",
-  platformSettingsRoutes
-);
-
-app.use(
-  "/api/admin/audit-logs",
-  auditLogRoutes
-);
-
-app.use(
-  "/api/admin/products",
-  productModerationRoutes
-);
-
-app.use(
-  "/api/admin/payouts",
-  adminPayoutRoutes
-);
+// Dispute and refund workflow.
+app.use("/api/admin/disputes", adminDisputeRoutes);
+app.use("/api/admin/refunds", adminRefundRoutes);
 
 // General administrator routes.
 app.use("/api/admin", adminRoutes);
 
 // ======================================================
 // SELLER ROUTES
-// Mount applicant/specific routes before sellerOnly.
 // ======================================================
 
-// Pending applicants need access to KYC.
-app.use(
-  "/api/seller/kyc",
-  sellerKycRoutes
-);
+app.use("/api/seller/kyc", sellerKycRoutes);
+app.use("/api/seller/payouts", payoutRoutes);
 
-// Approved sellers use payout management.
-app.use(
-  "/api/seller/payouts",
-  payoutRoutes
-);
+// Dispute and recovery routes.
+app.use("/api/seller/disputes", sellerDisputeRoutes);
+app.use("/api/seller/recoveries", sellerRecoveryRoutes);
 
-// General seller routes.
 app.use("/api/seller", sellerRoutes);
-
-app.use(
-  "/api/seller/profile",
-  sellerProfileRoutes
-);
+app.use("/api/seller/profile", sellerProfileRoutes);
 
 // ======================================================
-// ORDER ROUTES
+// CUSTOMER AND ORDER ROUTES
 // ======================================================
 
-app.use(
-  "/api/seller/orders",
-  orderRoutes
-);
+// Customer dispute endpoints.
+app.use("/api/disputes", disputeRoutes);
 
-app.use(
-  "/api/orders",
-  customerOrderRoutes
-);
+// Existing order endpoints.
+app.use("/api/seller/orders", orderRoutes);
+app.use("/api/orders", customerOrderRoutes);
 
 // ======================================================
 // 404 HANDLER
@@ -218,14 +190,10 @@ const startServer = async () => {
   try {
     await connectDB();
 
-    // Start warranty reminder processing only after
-    // MongoDB has connected successfully.
     startWarrantyReminderScheduler();
 
     app.listen(PORT, () => {
-      console.log(
-        `Server running on port ${PORT}`
-      );
+      console.log(`Server running on port ${PORT}`);
     });
   } catch (error) {
     console.error(

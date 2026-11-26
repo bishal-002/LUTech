@@ -1,38 +1,18 @@
-
 const mongoose = require("mongoose");
 
-const {
-  AuditLog,
-} = require("../models/AuditLog");
-
+const { AuditLog } = require("../models/AuditLog");
 const AdminProfile = require("../models/AdminProfile");
 
-// ======================================================
-// ADMIN METRIC ACTION MAPPING
-// ======================================================
-
-// Metrics are updated only for successful audited actions.
-//
-// IMPORTANT:
-// These actions must be executed inside a MongoDB transaction.
-// The business update, audit log and metric increment must
-// either all succeed or all roll back.
-
 const ADMIN_METRIC_BY_ACTION = Object.freeze({
-  // Seller reviews.
   SELLER_KYC_APPROVED: "metrics.sellersReviewed",
   SELLER_KYC_REJECTED: "metrics.sellersReviewed",
-
-  // Product moderation.
   PRODUCT_APPROVED: "metrics.productsModerated",
   PRODUCT_REJECTED: "metrics.productsModerated",
   PRODUCT_SUSPENDED: "metrics.productsModerated",
   PRODUCT_VERIFIED_GENUINE: "metrics.productsModerated",
+  DISPUTE_RESOLVED: "metrics.disputesResolved",
+  DISPUTE_REJECTED: "metrics.disputesResolved",
 });
-
-// ======================================================
-// UPDATE ADMIN ACTIVITY METRIC
-// ======================================================
 
 const incrementAdminActivityMetric = async ({
   adminId,
@@ -40,28 +20,18 @@ const incrementAdminActivityMetric = async ({
   action,
   session,
 }) => {
-  const metricPath =
-    ADMIN_METRIC_BY_ACTION[action];
+  const metricPath = ADMIN_METRIC_BY_ACTION[action];
 
-  // No metric is associated with this audit action.
-  if (!metricPath) {
-    return;
-  }
+  if (!metricPath) return;
 
-  // These tracked operations must be administrator actions.
   if (actorRole !== "admin") {
-    throw new Error(
-      `Audit action ${action} requires an administrator actor.`
-    );
+    throw new Error(`Audit action ${action} requires an administrator actor.`);
   }
 
   if (!mongoose.isValidObjectId(adminId)) {
-    throw new Error(
-      "A valid administrator ID is required for metric updates."
-    );
+    throw new Error("A valid administrator ID is required for metric updates.");
   }
 
-  // Prevent accidental metric updates outside transactions.
   if (
     !session ||
     typeof session.inTransaction !== "function" ||
@@ -78,13 +48,9 @@ const incrementAdminActivityMetric = async ({
       status: "active",
     },
     {
-      $inc: {
-        [metricPath]: 1,
-      },
+      $inc: { [metricPath]: 1 },
     },
-    {
-      session,
-    }
+    { session }
   );
 
   if (result.matchedCount !== 1) {
@@ -93,10 +59,6 @@ const incrementAdminActivityMetric = async ({
     );
   }
 };
-
-// ======================================================
-// WRITE AUDIT LOG
-// ======================================================
 
 const writeAuditLog = async ({
   adminId = null,
@@ -109,48 +71,35 @@ const writeAuditLog = async ({
   note,
   session = null,
 }) => {
-  // Resolve actor type for existing admin integrations.
-  if (!actorRole && adminId) {
-    actorRole = "admin";
-  }
+  if (!actorRole && adminId) actorRole = "admin";
 
   if (!actorRole) {
-    throw new Error(
-      "An audit actor role is required."
-    );
+    throw new Error("An audit actor role is required.");
   }
 
-  // Administrator audit entries retain adminId.
   if (actorRole === "admin") {
     if (!mongoose.isValidObjectId(adminId)) {
-      throw new Error(
-        "Invalid audit administrator ID."
-      );
+      throw new Error("Invalid audit administrator ID.");
     }
 
     actorId = actorId || adminId;
   }
 
-  // Seller audit entries use actorId.
-  if (
-    actorRole === "seller" &&
-    !mongoose.isValidObjectId(actorId)
-  ) {
-    throw new Error(
-      "Invalid audit seller ID."
-    );
+  if (["seller", "customer"].includes(actorRole)) {
+    if (!mongoose.isValidObjectId(actorId)) {
+      throw new Error(`Invalid audit ${actorRole} ID.`);
+    }
+
+    adminId = null;
   }
 
-  // System events do not represent a user account.
   if (actorRole === "system") {
     adminId = null;
     actorId = null;
   }
 
   if (!mongoose.isValidObjectId(targetId)) {
-    throw new Error(
-      "Invalid audit target ID."
-    );
+    throw new Error("Invalid audit target ID.");
   }
 
   if (
@@ -158,9 +107,7 @@ const writeAuditLog = async ({
     typeof changes !== "object" ||
     Array.isArray(changes)
   ) {
-    throw new Error(
-      "Audit changes must be an object."
-    );
+    throw new Error("Audit changes must be an object.");
   }
 
   const auditData = {
@@ -178,19 +125,7 @@ const writeAuditLog = async ({
   }
 
   const options = session ? { session } : {};
-
-  // --------------------------------------------------
-  // CREATE AUDIT RECORD
-  // --------------------------------------------------
-
-  const [auditRecord] = await AuditLog.create(
-    [auditData],
-    options
-  );
-
-  // --------------------------------------------------
-  // UPDATE ADMIN ACTIVITY METRICS
-  // --------------------------------------------------
+  const [auditRecord] = await AuditLog.create([auditData], options);
 
   await incrementAdminActivityMetric({
     adminId,
@@ -201,10 +136,6 @@ const writeAuditLog = async ({
 
   return auditRecord;
 };
-
-// ======================================================
-// EXPORT
-// ======================================================
 
 module.exports = {
   writeAuditLog,

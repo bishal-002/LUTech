@@ -4,15 +4,13 @@ const {
   isValidPermission,
 } = require("../config/adminPermissions");
 
-// Permissions that require enabled two-factor authentication.
+// Financial/dispute decisions require a recently verified admin session.
 const TWO_FACTOR_REQUIRED_PERMISSIONS = [
   "approve_sellers",
   "process_payouts",
+  "resolve_disputes",
+  "issue_refunds",
 ];
-
-// ======================================================
-// ADMIN PERMISSION MIDDLEWARE
-// ======================================================
 
 const requireAdminPermission = (requiredPermission) => {
   if (!isValidPermission(requiredPermission)) {
@@ -32,9 +30,7 @@ const requireAdminPermission = (requiredPermission) => {
       const adminProfile = await AdminProfile.findOne({
         userId: req.user._id,
       })
-        .select(
-          "adminRole permissions status security.twoFactorEnabled"
-        )
+        .select("adminRole permissions status security.twoFactorEnabled")
         .lean();
 
       if (!adminProfile) {

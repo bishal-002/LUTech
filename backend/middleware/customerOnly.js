@@ -1,0 +1,17 @@
+const customerOnly = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      message: "Authentication required.",
+    });
+  }
+
+  if (req.user.role !== "customer") {
+    return res.status(403).json({
+      message: "Customer account required.",
+    });
+  }
+
+  return next();
+};
+
+module.exports = customerOnly;
