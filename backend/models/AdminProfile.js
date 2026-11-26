@@ -209,6 +209,13 @@ const adminMetricsSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+
+    // Number of customer reviews approved or rejected.
+    reviewsModerated: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   {
     _id: false,

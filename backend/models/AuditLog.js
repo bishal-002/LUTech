@@ -14,6 +14,10 @@ const AUDIT_ACTIONS = [
   "PRODUCT_REJECTED",
   "CATEGORY_SCHEMA_UPDATED",
 
+  // Customer review moderation
+  "REVIEW_APPROVED",
+  "REVIEW_REJECTED",
+
   "DISPUTE_OPENED",
   "DISPUTE_SELLER_RESPONDED",
   "DISPUTE_MESSAGE_ADDED",
@@ -45,6 +49,7 @@ const AUDIT_TARGET_TYPES = [
   "AdminProfile",
   "Seller",
   "Product",
+  "Review",
   "User",
   "Order",
   "Payout",
@@ -61,6 +66,10 @@ const NOTE_REQUIRED_ACTIONS = [
   "PAYOUT_RELEASED",
   "PRODUCT_SUSPENDED",
   "PRODUCT_REJECTED",
+
+  // Review rejection must include a reason.
+  "REVIEW_REJECTED",
+
   "ADMIN_PROFILE_SUSPENDED",
   "ADMIN_PROFILE_REVOKED",
   "ADMIN_PROFILE_DOWNGRADED",
@@ -75,74 +84,90 @@ const NOTE_REQUIRED_ACTIONS = [
   "PLATFORM_SETTINGS_UPDATED",
 ];
 
-const auditLogSchema = new mongoose.Schema({
-  adminId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    default: null,
-    immutable: true,
-  },
-  actorId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    default: null,
-    immutable: true,
-  },
-  actorRole: {
-    type: String,
-    enum: ["admin", "seller", "customer", "system"],
-    default: "admin",
-    required: true,
-    immutable: true,
-  },
-  action: {
-    type: String,
-    enum: AUDIT_ACTIONS,
-    required: true,
-    immutable: true,
-  },
-  targetType: {
-    type: String,
-    enum: AUDIT_TARGET_TYPES,
-    required: true,
-    immutable: true,
-  },
-  targetId: {
-    type: mongoose.Schema.Types.ObjectId,
-    required: true,
-    immutable: true,
-  },
-  changes: {
-    before: {
-      type: mongoose.Schema.Types.Mixed,
+const auditLogSchema = new mongoose.Schema(
+  {
+    adminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       default: null,
       immutable: true,
     },
-    after: {
-      type: mongoose.Schema.Types.Mixed,
+
+    actorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       default: null,
       immutable: true,
     },
-  },
-  note: {
-    type: String,
-    trim: true,
-    maxlength: 500,
-    required: function () {
-      return NOTE_REQUIRED_ACTIONS.includes(this.action);
+
+    actorRole: {
+      type: String,
+      enum: ["admin", "seller", "customer", "system"],
+      default: "admin",
+      required: true,
+      immutable: true,
     },
-    immutable: true,
+
+    action: {
+      type: String,
+      enum: AUDIT_ACTIONS,
+      required: true,
+      immutable: true,
+    },
+
+    targetType: {
+      type: String,
+      enum: AUDIT_TARGET_TYPES,
+      required: true,
+      immutable: true,
+    },
+
+    targetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      immutable: true,
+    },
+
+    changes: {
+      before: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null,
+        immutable: true,
+      },
+
+      after: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null,
+        immutable: true,
+      },
+    },
+
+    note: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      required: function () {
+        return NOTE_REQUIRED_ACTIONS.includes(this.action);
+      },
+      immutable: true,
+    },
+
+    createdAt: {
+      type: Date,
+      default: Date.now,
+      immutable: true,
+      required: true,
+    },
   },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-    immutable: true,
-    required: true,
-  },
-}, {
-  minimize: false,
-  timestamps: false,
-});
+  {
+    minimize: false,
+    timestamps: false,
+  }
+);
+
+// ======================================================
+// ACTOR VALIDATION
+// ======================================================
 
 auditLogSchema.pre("validate", function () {
   if (this.actorRole === "admin") {
@@ -176,14 +201,34 @@ auditLogSchema.pre("validate", function () {
   }
 });
 
-auditLogSchema.index({ adminId: 1, createdAt: -1 });
-auditLogSchema.index({ actorId: 1, createdAt: -1 });
+// ======================================================
+// INDEXES
+// ======================================================
+
+auditLogSchema.index({
+  adminId: 1,
+  createdAt: -1,
+});
+
+auditLogSchema.index({
+  actorId: 1,
+  createdAt: -1,
+});
+
 auditLogSchema.index({
   targetType: 1,
   targetId: 1,
   createdAt: -1,
 });
-auditLogSchema.index({ action: 1, createdAt: -1 });
+
+auditLogSchema.index({
+  action: 1,
+  createdAt: -1,
+});
+
+// ======================================================
+// IMMUTABILITY PROTECTION
+// ======================================================
 
 auditLogSchema.pre("save", function () {
   if (!this.isNew) {
@@ -207,6 +252,10 @@ const blockAuditMutation = function () {
 ].forEach((operation) => {
   auditLogSchema.pre(operation, blockAuditMutation);
 });
+
+// ======================================================
+// EXPORTS
+// ======================================================
 
 module.exports = {
   AuditLog:

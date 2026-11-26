@@ -17,6 +17,10 @@ const {
   initializeWarrantyRemindersForDeliveredOrder,
 } = require("../services/warrantyService");
 
+const {
+  refreshSellerMetrics,
+} = require("../services/sellerMetricsService");
+
 // Keep the existing controller export compatible.
 const {
   createCustomerOrder,
@@ -256,9 +260,31 @@ const changeOrderStatus = async (
           }
         }
 
+        // --------------------------------------------
+        // RECORD CANCELLATION DETAILS
+        // --------------------------------------------
+
         currentOrder.status = "cancelled";
+        currentOrder.cancelledAt =
+          currentOrder.cancelledAt || new Date();
+
+        currentOrder.cancelledBy =
+          actor?.role === "seller"
+            ? "seller"
+            : actor?.role === "customer"
+              ? "customer"
+              : actor?.role === "admin"
+                ? "admin"
+                : "system";
 
         await currentOrder.save({ session });
+
+        // Recalculate metrics from the seller's orders
+        // inside the same transaction as the cancellation.
+        await refreshSellerMetrics({
+          sellerId: currentOrder.sellerId,
+          session,
+        });
 
         cancelledOrder = currentOrder;
         transitionAllowed = true;
@@ -268,15 +294,24 @@ const changeOrderStatus = async (
         return false;
       }
 
-      // The inventory transaction has committed successfully.
+      // The inventory and metrics transaction committed.
       order.status = cancelledOrder.status;
+      order.cancelledAt = cancelledOrder.cancelledAt;
+      order.cancelledBy = cancelledOrder.cancelledBy;
       order.paymentStatus = cancelledOrder.paymentStatus;
       order.updatedAt = cancelledOrder.updatedAt;
 
       // Send restock emails only after transaction commit.
-      // Email failures must not roll back order cancellation
-      // or restored inventory.
-      await notifyRestockEvents(restockEvents);
+      // Email failures must not roll back cancellation,
+      // restored inventory, or seller metrics.
+      try {
+        await notifyRestockEvents(restockEvents);
+      } catch (notificationError) {
+        console.error(
+          "Restock notification error after cancellation:",
+          notificationError
+        );
+      }
 
       return true;
     } finally {
@@ -352,6 +387,16 @@ const changeOrderStatus = async (
 
       currentOrder.status = status;
 
+      if (status === "confirmed") {
+        currentOrder.confirmedAt =
+          currentOrder.confirmedAt || new Date();
+      }
+
+      if (status === "shipped") {
+        currentOrder.shippedAt =
+          currentOrder.shippedAt || new Date();
+      }
+
       if (status === "delivered") {
         currentOrder.deliveredAt = new Date();
 
@@ -387,6 +432,18 @@ const changeOrderStatus = async (
       await currentOrder.save({ session });
 
       // ------------------------------------------------
+      // REFRESH SELLER METRICS
+      // ------------------------------------------------
+
+      // Recalculate from source orders rather than using
+      // $inc. This keeps the metrics idempotent and avoids
+      // duplicate increments when a request is retried.
+      await refreshSellerMetrics({
+        sellerId: currentOrder.sellerId,
+        session,
+      });
+
+      // ------------------------------------------------
       // CREATE SELLER PAYOUT WHEN COD ORDER IS DELIVERED
       // ------------------------------------------------
 
@@ -402,7 +459,7 @@ const changeOrderStatus = async (
       }
 
       // ------------------------------------------------
-      // UPDATE CUSTOMER AND SELLER METRICS: DELIVERED
+      // UPDATE CUSTOMER METRICS: DELIVERED
       // ------------------------------------------------
 
       if (status === "delivered") {
@@ -423,26 +480,6 @@ const changeOrderStatus = async (
         if (customerUpdate.matchedCount !== 1) {
           throw createOrderStatusError(
             "Customer account not found. Customer metrics could not be updated.",
-            409
-          );
-        }
-
-        const sellerUpdate = await User.updateOne(
-          {
-            _id: currentOrder.sellerId,
-            role: "seller",
-          },
-          {
-            $inc: {
-              "metrics.completedOrders": 1,
-            },
-          },
-          { session }
-        );
-
-        if (sellerUpdate.matchedCount !== 1) {
-          throw createOrderStatusError(
-            "Seller account not found. Seller metrics could not be updated.",
             409
           );
         }
@@ -474,8 +511,8 @@ const changeOrderStatus = async (
         }
       }
 
-      // The order status and the customer metric are
-      // committed together by this transaction.
+      // The order status, seller metrics, and customer
+      // metrics are committed together by this transaction.
       transitionAllowed = true;
       updatedOrder = currentOrder;
     });
@@ -487,6 +524,8 @@ const changeOrderStatus = async (
     // Synchronize the original order for the response.
     order.status = updatedOrder.status;
     order.paymentStatus = updatedOrder.paymentStatus;
+    order.confirmedAt = updatedOrder.confirmedAt;
+    order.shippedAt = updatedOrder.shippedAt;
     order.deliveredAt = updatedOrder.deliveredAt;
     order.refusedAt = updatedOrder.refusedAt;
     order.refusalRecordedBy =

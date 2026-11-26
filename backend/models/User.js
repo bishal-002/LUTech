@@ -161,16 +161,56 @@ const sellerDefaultsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+
 const sellerMetricsSchema = new mongoose.Schema(
   {
-    reviewCount: { type: Number, default: 0, min: 0 },
-    onTimeShipRate: { type: Number, default: 0, min: 0, max: 100 },
-    cancellationRate: { type: Number, default: 0, min: 0, max: 100 },
-    avgResponseMinutes: { type: Number, default: 0, min: 0 },
-    completedOrders: { type: Number, default: 0, min: 0 },
+    // Approved customer reviews.
+    reviewCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    averageRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+
+    // Order fulfilment performance.
+    onTimeShipRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+
+    cancellationRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+
+    // Average time between order placement
+    // and seller confirmation.
+    avgResponseMinutes: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    // Successfully delivered orders.
+    completedOrders: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   { _id: false }
 );
+
 
 // ======================================================
 // SELLER KYC DOCUMENT SCHEMA

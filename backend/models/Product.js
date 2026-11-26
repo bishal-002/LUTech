@@ -488,6 +488,25 @@ const productSchema = new mongoose.Schema(
       minlength: 100,
     },
 
+    // --------------------------------------------------
+    // CUSTOMER RATING SUMMARY
+    // Maintained from approved Review documents only.
+    // Never accept these values directly from customers.
+    // --------------------------------------------------
+
+    averageRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+
+    reviewCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     boxContents: {
       type: [boxContentSchema],
       default: [],
@@ -921,6 +940,12 @@ productSchema.index({
 
 productSchema.index({
   "compatibility.mode": 1,
+});
+
+// Product rating and review sorting.
+productSchema.index({
+  averageRating: -1,
+  reviewCount: -1,
 });
 
 // ======================================================

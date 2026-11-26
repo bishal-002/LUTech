@@ -18,6 +18,84 @@ const roundMoney = (value) =>
   Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 
 // ======================================================
+// DISPATCH DEADLINE HELPER
+// Bangladesh working days: Sunday–Thursday.
+// Friday and Saturday are treated as weekends.
+// ======================================================
+
+const isBangladeshWorkingDay = (date) => {
+  const day = date.getDay();
+  return day !== 5 && day !== 6;
+};
+
+const addBangladeshBusinessDays = (date, numberOfDays) => {
+  const result = new Date(date);
+  let addedDays = 0;
+
+  while (addedDays < numberOfDays) {
+    result.setDate(result.getDate() + 1);
+
+    if (isBangladeshWorkingDay(result)) {
+      addedDays += 1;
+    }
+  }
+
+  return result;
+};
+
+const getDispatchDeadline = (
+  dispatchTime,
+  orderDate = new Date()
+) => {
+  const deadline = new Date(orderDate);
+
+  if (Number.isNaN(deadline.getTime())) {
+    return null;
+  }
+
+  if (
+    dispatchTime ===
+    "Same-Day Dispatch (orders before 3 PM)"
+  ) {
+    const cutoff = new Date(deadline);
+    cutoff.setHours(15, 0, 0, 0);
+
+    if (
+      isBangladeshWorkingDay(deadline) &&
+      deadline <= cutoff
+    ) {
+      deadline.setHours(23, 59, 59, 999);
+      return deadline;
+    }
+
+    // Orders after the cutoff or on a weekend are
+    // expected to dispatch on the next working day.
+    const nextWorkingDay = addBangladeshBusinessDays(
+      deadline,
+      1
+    );
+    nextWorkingDay.setHours(23, 59, 59, 999);
+    return nextWorkingDay;
+  }
+
+  if (dispatchTime === "1–2 Business Days") {
+    const result = addBangladeshBusinessDays(deadline, 2);
+    result.setHours(23, 59, 59, 999);
+    return result;
+  }
+
+  if (dispatchTime === "3–5 Business Days") {
+    const result = addBangladeshBusinessDays(deadline, 5);
+    result.setHours(23, 59, 59, 999);
+    return result;
+  }
+
+  // Unknown or unsupported dispatch settings should not
+  // create a misleading on-time shipping deadline.
+  return null;
+};
+
+// ======================================================
 // CREATE CUSTOMER ORDER
 // POST /api/orders/checkout
 // ======================================================
@@ -126,9 +204,7 @@ const createCustomerOrder = async (req, res) => {
           .session(session);
 
         if (!customer) {
-          throw new Error(
-            "Customer account not found."
-          );
+          throw new Error("Customer account not found.");
         }
 
         const refusedCodOrders = Number(
@@ -422,6 +498,10 @@ const createCustomerOrder = async (req, res) => {
           const sellerKey = seller._id.toString();
 
           if (!sellerGroups.has(sellerKey)) {
+            const dispatchTime =
+              seller.defaults?.dispatchTime ||
+              "1–2 Business Days";
+
             sellerGroups.set(sellerKey, {
               sellerId: seller._id,
               items: [],
@@ -432,6 +512,14 @@ const createCustomerOrder = async (req, res) => {
 
               payoutHoldDaysSnapshot:
                 payoutHoldDays,
+
+              // Snapshot dispatch promise at checkout.
+              // Multiple products from one seller share
+              // the same seller-level dispatch deadline.
+              expectedShipAt: getDispatchDeadline(
+                dispatchTime,
+                new Date()
+              ),
             });
           }
 
@@ -489,19 +577,15 @@ const createCustomerOrder = async (req, res) => {
             paymentStatus: "pending",
             status: "pending",
 
-            // ------------------------------------------
-            // PRIORITY 2 PAYOUT SNAPSHOTS
-            // ------------------------------------------
-
-            // Preserve the commission rate that applies
-            // when the customer places this order.
+            // Priority 2 financial snapshots.
             commissionRateSnapshot:
               group.commissionRateSnapshot,
 
-            // Preserve the payout hold period applicable
-            // when the customer places this order.
             payoutHoldDaysSnapshot:
               group.payoutHoldDaysSnapshot,
+
+            // Seller performance deadline snapshot.
+            expectedShipAt: group.expectedShipAt,
           });
         }
 

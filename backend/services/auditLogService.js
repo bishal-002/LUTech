@@ -1,18 +1,33 @@
+
 const mongoose = require("mongoose");
 
 const { AuditLog } = require("../models/AuditLog");
 const AdminProfile = require("../models/AdminProfile");
 
+// ======================================================
+// ADMIN ACTIVITY METRIC MAPPING
+// ======================================================
+
 const ADMIN_METRIC_BY_ACTION = Object.freeze({
   SELLER_KYC_APPROVED: "metrics.sellersReviewed",
   SELLER_KYC_REJECTED: "metrics.sellersReviewed",
+
   PRODUCT_APPROVED: "metrics.productsModerated",
   PRODUCT_REJECTED: "metrics.productsModerated",
   PRODUCT_SUSPENDED: "metrics.productsModerated",
   PRODUCT_VERIFIED_GENUINE: "metrics.productsModerated",
+
+  // Customer review moderation
+  REVIEW_APPROVED: "metrics.reviewsModerated",
+  REVIEW_REJECTED: "metrics.reviewsModerated",
+
   DISPUTE_RESOLVED: "metrics.disputesResolved",
   DISPUTE_REJECTED: "metrics.disputesResolved",
 });
+
+// ======================================================
+// INCREMENT ADMIN ACTIVITY METRIC
+// ======================================================
 
 const incrementAdminActivityMetric = async ({
   adminId,
@@ -22,14 +37,20 @@ const incrementAdminActivityMetric = async ({
 }) => {
   const metricPath = ADMIN_METRIC_BY_ACTION[action];
 
-  if (!metricPath) return;
+  if (!metricPath) {
+    return;
+  }
 
   if (actorRole !== "admin") {
-    throw new Error(`Audit action ${action} requires an administrator actor.`);
+    throw new Error(
+      `Audit action ${action} requires an administrator actor.`
+    );
   }
 
   if (!mongoose.isValidObjectId(adminId)) {
-    throw new Error("A valid administrator ID is required for metric updates.");
+    throw new Error(
+      "A valid administrator ID is required for metric updates."
+    );
   }
 
   if (
@@ -48,9 +69,13 @@ const incrementAdminActivityMetric = async ({
       status: "active",
     },
     {
-      $inc: { [metricPath]: 1 },
+      $inc: {
+        [metricPath]: 1,
+      },
     },
-    { session }
+    {
+      session,
+    }
   );
 
   if (result.matchedCount !== 1) {
@@ -59,6 +84,10 @@ const incrementAdminActivityMetric = async ({
     );
   }
 };
+
+// ======================================================
+// WRITE AUDIT LOG
+// ======================================================
 
 const writeAuditLog = async ({
   adminId = null,
@@ -71,7 +100,10 @@ const writeAuditLog = async ({
   note,
   session = null,
 }) => {
-  if (!actorRole && adminId) actorRole = "admin";
+  // Backward compatibility for existing admin callers.
+  if (!actorRole && adminId) {
+    actorRole = "admin";
+  }
 
   if (!actorRole) {
     throw new Error("An audit actor role is required.");
@@ -125,8 +157,14 @@ const writeAuditLog = async ({
   }
 
   const options = session ? { session } : {};
-  const [auditRecord] = await AuditLog.create([auditData], options);
 
+  const [auditRecord] = await AuditLog.create(
+    [auditData],
+    options
+  );
+
+  // This also increments reviewsModerated for review
+  // approval and rejection actions.
   await incrementAdminActivityMetric({
     adminId,
     actorRole,
@@ -136,6 +174,10 @@ const writeAuditLog = async ({
 
   return auditRecord;
 };
+
+// ======================================================
+// EXPORTS
+// ======================================================
 
 module.exports = {
   writeAuditLog,

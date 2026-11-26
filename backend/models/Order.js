@@ -291,12 +291,61 @@ const orderSchema = new mongoose.Schema(
     },
 
     // -----------------------------------------
+    // SELLER PERFORMANCE TIMESTAMPS
+    // -----------------------------------------
+
+    // First time the seller confirms the order.
+    // Used to calculate average seller response time.
+    confirmedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // Expected dispatch deadline, snapshotted at checkout.
+    // Populated by the checkout/order integration.
+    expectedShipAt: {
+      type: Date,
+      default: null,
+    },
+
+    // First time the seller marks the order as shipped.
+    // Used to calculate on-time shipping rate.
+    shippedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // -----------------------------------------
     // DELIVERY INFORMATION
     // -----------------------------------------
 
     deliveredAt: {
       type: Date,
       default: null,
+    },
+
+    // -----------------------------------------
+    // CANCELLATION INFORMATION
+    // -----------------------------------------
+
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+
+    // Identifies who initiated the cancellation.
+    // Used to distinguish seller cancellations from
+    // customer, administrator and system cancellations.
+    cancelledBy: {
+      type: String,
+      enum: [
+        "",
+        "seller",
+        "customer",
+        "admin",
+        "system",
+      ],
+      default: "",
     },
 
     // -----------------------------------------
@@ -538,9 +587,37 @@ orderSchema.pre("validate", function () {
 // Indexes for order queries
 // ---------------------------------------------
 
-orderSchema.index({ customerId: 1, createdAt: -1 });
-orderSchema.index({ sellerId: 1, createdAt: -1 });
-orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({
+  customerId: 1,
+  createdAt: -1,
+});
+
+orderSchema.index({
+  sellerId: 1,
+  createdAt: -1,
+});
+
+orderSchema.index({
+  status: 1,
+  createdAt: -1,
+});
+
+// Seller performance indexes.
+orderSchema.index({
+  sellerId: 1,
+  shippedAt: -1,
+});
+
+orderSchema.index({
+  sellerId: 1,
+  confirmedAt: -1,
+});
+
+orderSchema.index({
+  sellerId: 1,
+  cancelledBy: 1,
+  cancelledAt: -1,
+});
 
 module.exports =
   mongoose.models.Order ||

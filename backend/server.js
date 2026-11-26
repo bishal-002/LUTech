@@ -1,3 +1,4 @@
+
 require("dotenv").config();
 
 const dns = require("dns");
@@ -26,6 +27,9 @@ const cartRoutes = require("./routes/cartRoutes");
 const catalogRoutes = require("./routes/catalogRoutes");
 const testEmailRoute = require("./routes/testEmailRoute");
 
+// Review routes.
+const reviewRoutes = require("./routes/reviewRoutes");
+
 // Admin routes.
 const adminRoutes = require("./routes/adminRoutes");
 const adminProfileRoutes = require("./routes/adminProfileRoutes");
@@ -36,6 +40,7 @@ const productModerationRoutes = require("./routes/productModerationRoutes");
 const adminPayoutRoutes = require("./routes/adminPayoutRoutes");
 const adminDisputeRoutes = require("./routes/adminDisputeRoutes");
 const adminRefundRoutes = require("./routes/adminRefundRoutes");
+const adminReviewRoutes = require("./routes/adminReviewRoutes");
 
 // Seller routes.
 const sellerRoutes = require("./routes/sellerRoutes");
@@ -44,6 +49,7 @@ const sellerKycRoutes = require("./routes/sellerKycRoutes");
 const payoutRoutes = require("./routes/payoutRoutes");
 const sellerDisputeRoutes = require("./routes/sellerDisputeRoutes");
 const sellerRecoveryRoutes = require("./routes/sellerRecoveryRoutes");
+const sellerReviewRoutes = require("./routes/sellerReviewRoutes");
 
 // Order and customer routes.
 const orderRoutes = require("./routes/orderRoutes");
@@ -110,6 +116,9 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/catalog", catalogRoutes);
 app.use("/api/test-email", testEmailRoute);
 
+// Customer review submission, editing and public retrieval.
+app.use("/api/reviews", reviewRoutes);
+
 // ======================================================
 // SPECIFIC ADMIN ROUTES
 // Mount before the general /api/admin router.
@@ -122,6 +131,9 @@ app.use("/api/admin/audit-logs", auditLogRoutes);
 app.use("/api/admin/products", productModerationRoutes);
 app.use("/api/admin/payouts", adminPayoutRoutes);
 
+// Review moderation.
+app.use("/api/admin/reviews", adminReviewRoutes);
+
 // Dispute and refund workflow.
 app.use("/api/admin/disputes", adminDisputeRoutes);
 app.use("/api/admin/refunds", adminRefundRoutes);
@@ -132,6 +144,9 @@ app.use("/api/admin", adminRoutes);
 // ======================================================
 // SELLER ROUTES
 // ======================================================
+
+// Seller review visibility.
+app.use("/api/seller/reviews", sellerReviewRoutes);
 
 app.use("/api/seller/kyc", sellerKycRoutes);
 app.use("/api/seller/payouts", payoutRoutes);

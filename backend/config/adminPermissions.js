@@ -1,3 +1,4 @@
+
 // ======================================================
 // ADMIN ROLES
 // ======================================================
@@ -38,6 +39,10 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "manage_categories",
   "edit_category_schemas",
 
+  // Customer review moderation
+  "view_reviews",
+  "moderate_reviews",
+
   // Orders and customer support
   "view_orders",
   "manage_disputes",
@@ -62,6 +67,8 @@ const ROLE_DEFAULT_PERMISSIONS = Object.freeze({
     "manage_brands",
     "manage_categories",
     "edit_category_schemas",
+    "view_reviews",
+    "moderate_reviews",
   ],
 
   kyc_verifier: [
@@ -76,6 +83,7 @@ const ROLE_DEFAULT_PERMISSIONS = Object.freeze({
   support_agent: [
     "view_users",
     "view_orders",
+    "view_reviews",
     "manage_disputes",
     "resolve_disputes",
     "issue_refunds",
