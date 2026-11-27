@@ -15,19 +15,6 @@ export const getSellerKycQueue = async () => {
   return response.data;
 };
 
-export const getProductsForModeration = async (params = {}) => {
-  const response = await axiosClient.get("/admin/products", {
-    params: {
-      page: 1,
-      limit: 1,
-      status: "pending_review",
-      ...params,
-    },
-  });
-
-  return response.data;
-};
-
 export const getAdminUsers = async (params = {}) => {
   const response = await axiosClient.get("/admin/users", {
     params,
@@ -81,6 +68,71 @@ export const rejectSellerApplication = async (
   const response = await axiosClient.put(
     `/admin/sellers/${sellerId}/reject`,
     { reviewNote }
+  );
+
+  return response.data;
+};
+
+
+// ======================================================
+// PRODUCT MODERATION
+// ======================================================
+
+export const getProductsForModeration = async (params = {}) => {
+  const response = await axiosClient.get("/admin/products", {
+    params: {
+      page: 1,
+      limit: 20,
+      status: "pending_review",
+      ...params,
+    },
+  });
+
+  return response.data;
+};
+
+export const getProductVerificationProof = async (productId) => {
+  const response = await axiosClient.get(
+    `/admin/products/${productId}/verification-proof`,
+    {
+      responseType: "blob",
+    }
+  );
+
+  return response;
+};
+
+export const approveProduct = async (productId) => {
+  const response = await axiosClient.patch(
+    `/admin/products/${productId}/approve`,
+    {}
+  );
+
+  return response.data;
+};
+
+export const rejectProduct = async (productId, note) => {
+  const response = await axiosClient.patch(
+    `/admin/products/${productId}/reject`,
+    { note }
+  );
+
+  return response.data;
+};
+
+export const verifyGenuineProduct = async (productId, note = "") => {
+  const response = await axiosClient.patch(
+    `/admin/products/${productId}/verify-genuine`,
+    { note }
+  );
+
+  return response.data;
+};
+
+export const suspendProduct = async (productId, note) => {
+  const response = await axiosClient.patch(
+    `/admin/products/${productId}/suspend`,
+    { note }
   );
 
   return response.data;
