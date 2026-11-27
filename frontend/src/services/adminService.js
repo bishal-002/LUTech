@@ -137,3 +137,24 @@ export const suspendProduct = async (productId, note) => {
 
   return response.data;
 };
+
+// ======================================================
+// ADMIN USER MANAGEMENT
+// ======================================================
+
+export const updateAdminUserRole = async (userId, role) => {
+  const response = await axiosClient.put(
+    `/admin/users/${userId}/role`,
+    { role }
+  );
+
+  return response.data;
+};
+
+export const deactivateAdminUser = async (userId) => {
+  const response = await axiosClient.delete(
+    `/admin/users/${userId}`
+  );
+
+  return response.data;
+};
