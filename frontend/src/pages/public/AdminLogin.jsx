@@ -3,8 +3,12 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { loginUser } from "../../services/authService";
 
+import { useAuth } from "../../context/AuthContext";
+
 function AdminLogin() {
   const navigate = useNavigate();
+
+  const { setSession } = useAuth();
 
   const [formData, setFormData] = useState({
     email: "",
@@ -25,7 +29,9 @@ function AdminLogin() {
     e.preventDefault();
     setError("");
 
-    if (!formData.email.trim() || !formData.password) {
+    const email = formData.email.trim().toLowerCase();
+
+    if (!email || !formData.password) {
       setError("Email and password are required.");
       return;
     }
@@ -34,9 +40,35 @@ function AdminLogin() {
 
     try {
       const response = await loginUser({
-        email: formData.email.trim().toLowerCase(),
+        email,
         password: formData.password,
       });
+
+      // Admin accounts may require a second authentication factor.
+      if (response.requiresTwoFactor) {
+        if (!response.challengeToken) {
+          throw new Error("The security challenge was not provided.");
+        }
+
+        sessionStorage.setItem(
+          "lutech_admin_2fa",
+          JSON.stringify({
+            challengeToken: response.challengeToken,
+            method: response.method,
+            expiresAt: Date.now() + (response.expiresIn || 300) * 1000,
+          })
+        );
+
+        navigate("/admin/2fa", {
+          replace: true,
+          state: {
+            method: response.method,
+            expiresIn: response.expiresIn,
+          },
+        });
+
+        return;
+      }
 
       if (response.user?.role !== "admin") {
         setError("Access denied. Administrator privileges are required.");
@@ -44,21 +76,17 @@ function AdminLogin() {
       }
 
       if (!response.token) {
-        setError("Login failed: authentication token was not provided.");
-        return;
+        throw new Error("Authentication token was not provided.");
       }
 
-      localStorage.setItem("token", response.token);
-      localStorage.setItem(
-        "userInfo",
-        JSON.stringify(response.user)
-      );
+      setSession(response.token, response.user);
 
       navigate("/admin/dashboard", { replace: true });
     } catch (err) {
       setError(
         err.response?.data?.message ||
-          "Unable to sign in. Please try again."
+        err.message ||
+        "Unable to sign in. Please try again."
       );
     } finally {
       setLoading(false);

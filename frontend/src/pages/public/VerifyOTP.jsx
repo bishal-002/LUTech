@@ -1,91 +1,116 @@
 ﻿
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
-import { verifyOTP } from "../../services/authService";
+import { resendOTP, verifyOTP } from "../../services/authService";
 import AuthLayout from "../../components/AuthLayout";
 
 function VerifyOTP() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [formData, setFormData] = useState({
-    email: "",
+    email: location.state?.email || "",
     otp: "",
   });
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
 
-  const handleChange = (e) => {
-    setFormData((previousData) => ({
-      ...previousData,
-      [e.target.name]: e.target.value,
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+
+    setFormData((previous) => ({
+      ...previous,
+      [name]:
+        name === "otp"
+          ? value.replace(/\D/g, "").slice(0, 6)
+          : value,
     }));
 
     setError("");
+    setMessage("");
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    setMessage("");
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setError("");
+    setMessage("");
 
-    if (!formData.email.trim() || !formData.otp.trim()) {
-      setError("Email address and OTP are required.");
+    const email = formData.email.trim().toLowerCase();
+    const otp = formData.otp.trim();
+
+    if (!email || otp.length !== 6) {
+      setError("Enter your email address and complete 6-digit OTP.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const response = await verifyOTP({
-        email: formData.email.trim().toLowerCase(),
-        otp: formData.otp.trim(),
-      });
+      const response = await verifyOTP({ email, otp });
 
-      setMessage(response.message || "Email verified successfully.");
+      setMessage(
+        response.message || "Email verified successfully. You can now sign in."
+      );
 
       setTimeout(() => {
         navigate("/login", { replace: true });
-      }, 2000);
+      }, 1500);
     } catch (err) {
       setError(
         err.response?.data?.message ||
-          "OTP verification failed. Please check your email and OTP."
+          "OTP verification failed. Check your email and code."
       );
     } finally {
       setLoading(false);
     }
   };
 
+  const handleResend = async () => {
+    setError("");
+    setMessage("");
+
+    const email = formData.email.trim().toLowerCase();
+
+    if (!email) {
+      setError("Enter your email address before requesting another OTP.");
+      return;
+    }
+
+    setResending(true);
+
+    try {
+      const response = await resendOTP(email);
+
+      setMessage(
+        response.message || "A new verification code has been requested."
+      );
+
+      setFormData((previous) => ({
+        ...previous,
+        otp: "",
+      }));
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Unable to resend the verification code. Please try again."
+      );
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
     <AuthLayout
       title="Verify your email"
-      subtitle="One more step! Verify your email address to complete your LUTech registration."
+      subtitle="Enter the 6-digit verification code sent to your email address."
       topText="Already have an account?"
       topLinkText="Sign In"
       topLinkTo="/login"
     >
-      {/* Verification Icon */}
-      <div className="mb-7 flex justify-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#E5EDE7] text-[#1A2E26]">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            className="h-8 w-8"
-            aria-hidden="true"
-          >
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <path d="m3 7 9 6 9-6" />
-            <path d="m9 14 2 2 4-4" />
-          </svg>
-        </div>
-      </div>
-
       {message && (
         <div
           role="status"
@@ -105,7 +130,6 @@ function VerifyOTP() {
       )}
 
       <form onSubmit={handleSubmit} className="w-full min-w-0 space-y-5">
-        {/* Email Address */}
         <div>
           <label
             htmlFor="email"
@@ -114,121 +138,77 @@ function VerifyOTP() {
             Email address
           </label>
 
-          <div className="relative">
-            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#89958D]">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                className="h-5 w-5"
-                aria-hidden="true"
-              >
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <path d="m3 7 9 6 9-6" />
-              </svg>
-            </span>
-
-            <input
-              id="email"
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="you@example.com"
-              autoComplete="email"
-              required
-              disabled={loading}
-              className="w-full min-w-0 rounded-lg border border-[#E5E9E5] bg-[#F9FAF9] py-3 pl-11 pr-4 text-sm text-[#20332B] outline-none transition placeholder:text-[#A0AAA3] hover:border-[#C7D5CA] focus:border-[#1A2E26] focus:bg-white focus:ring-4 focus:ring-[#1A2E26]/10 disabled:cursor-not-allowed disabled:opacity-60"
-            />
-          </div>
+          <input
+            id="email"
+            type="email"
+            name="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={formData.email}
+            onChange={handleChange}
+            required
+            disabled={loading || resending}
+            className="w-full rounded-lg border border-[#E5E9E5] bg-[#F9FAF9] px-4 py-3 text-sm text-[#20332B] outline-none transition placeholder:text-[#A0AAA3] focus:border-[#1A2E26] focus:bg-white focus:ring-4 focus:ring-[#1A2E26]/10 disabled:opacity-60"
+          />
         </div>
 
-        {/* OTP */}
         <div>
           <label
             htmlFor="otp"
             className="mb-2 block text-sm font-semibold text-[#20332B]"
           >
-            One-time password (OTP)
+            One-time password
           </label>
 
-          <div className="relative">
-            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#89958D]">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                className="h-5 w-5"
-                aria-hidden="true"
-              >
-                <rect x="3" y="4" width="18" height="16" rx="2" />
-                <path d="M7 9h.01M12 9h.01M17 9h.01M7 14h10" />
-              </svg>
-            </span>
-
-            <input
-              id="otp"
-              type="text"
-              name="otp"
-              value={formData.otp}
-              onChange={handleChange}
-              placeholder="Enter your OTP"
-              autoComplete="one-time-code"
-              inputMode="numeric"
-              required
-              disabled={loading}
-              className="w-full min-w-0 rounded-lg border border-[#E5E9E5] bg-[#F9FAF9] py-3 pl-11 pr-4 text-sm tracking-[0.25em] text-[#20332B] outline-none transition placeholder:tracking-normal placeholder:text-[#A0AAA3] hover:border-[#C7D5CA] focus:border-[#1A2E26] focus:bg-white focus:ring-4 focus:ring-[#1A2E26]/10 disabled:cursor-not-allowed disabled:opacity-60"
-            />
-          </div>
+          <input
+            id="otp"
+            type="text"
+            name="otp"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            placeholder="Enter 6-digit OTP"
+            value={formData.otp}
+            onChange={handleChange}
+            required
+            disabled={loading}
+            className="w-full rounded-lg border border-[#E5E9E5] bg-[#F9FAF9] px-4 py-3 text-center text-xl font-semibold tracking-[0.4em] text-[#20332B] outline-none transition placeholder:text-sm placeholder:font-normal placeholder:tracking-normal placeholder:text-[#A0AAA3] focus:border-[#1A2E26] focus:bg-white focus:ring-4 focus:ring-[#1A2E26]/10 disabled:opacity-60"
+          />
 
           <p className="mt-2 text-xs leading-5 text-[#89958D]">
-            Enter the OTP exactly as it appears in your email.
+            Enter the latest code sent to your email.
           </p>
         </div>
 
-        {/* Verify Button */}
         <button
           type="submit"
-          disabled={loading}
-          className="group flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#1A2E26] px-4 py-3 text-sm font-bold text-white shadow-sm transition duration-200 hover:bg-[#294438] hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B9533B] disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={loading || formData.otp.length !== 6}
+          className="flex min-h-12 w-full items-center justify-center rounded-lg bg-[#1A2E26] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#294438] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? (
-            <>
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-              Verifying...
-            </>
-          ) : (
-            <>
-              Verify Email
-              <span className="transition-transform group-hover:translate-x-1">
-                →
-              </span>
-            </>
-          )}
+          {loading ? "Verifying..." : "Verify Email"}
         </button>
       </form>
 
-      {/* Login Link */}
-      <div className="my-6 flex items-center gap-3">
-        <div className="h-px flex-1 bg-[#E5E9E5]" />
-        <span className="text-xs text-[#89958D]">Already verified?</span>
-        <div className="h-px flex-1 bg-[#E5E9E5]" />
+      <div className="mt-5 text-center">
+        <span className="text-sm text-[#68766F]">
+          Didn't receive a code?{" "}
+        </span>
+
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={resending || loading}
+          className="text-sm font-semibold text-[#1A2E26] underline underline-offset-4 hover:text-[#B9533B] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {resending ? "Sending..." : "Resend OTP"}
+        </button>
       </div>
 
       <Link
         to="/login"
-        className="flex min-h-11 w-full items-center justify-center rounded-lg border border-[#D5DED7] px-4 py-2.5 text-sm font-semibold text-[#20332B] transition hover:border-[#1A2E26] hover:bg-[#EBF0EB]"
+        className="mt-6 flex min-h-11 w-full items-center justify-center rounded-lg border border-[#D5DED7] px-4 py-2.5 text-sm font-semibold text-[#20332B] transition hover:border-[#1A2E26] hover:bg-[#EBF0EB]"
       >
-        Sign In to LUTech
-      </Link>
-
-      <Link
-        to="/"
-        className="mt-6 block text-center text-xs font-medium text-[#89958D] transition hover:text-[#B9533B]"
-      >
-        ← Back to Marketplace
+        Back to Sign In
       </Link>
     </AuthLayout>
   );

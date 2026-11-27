@@ -571,7 +571,7 @@ const resendOTP = async (req, res) => {
     const cooldownActive =
       user.otpLastSentAt &&
       now.getTime() - user.otpLastSentAt.getTime() <
-        OTP_RESEND_COOLDOWN_MS;
+      OTP_RESEND_COOLDOWN_MS;
 
     // Maximum 5 OTP emails per hour.
     if (cooldownActive || sendCount >= OTP_MAX_SENDS_PER_WINDOW) {
@@ -601,6 +601,7 @@ const resendOTP = async (req, res) => {
         subject: "LUTech Email Verification",
         text: `Your new OTP is ${otp}. It will expire in 5 minutes.`,
       });
+      console.info("[OTP] Resend email accepted by SMTP transport.");
     } catch (mailError) {
       console.error("Resend OTP email failed:", mailError);
 
@@ -838,7 +839,7 @@ const updateUserProfile = async (req, res) => {
               (
                 typeof item[field] !== "string" ||
                 item[field].length >
-                  (field === "streetAddress" ? 200 : 120)
+                (field === "streetAddress" ? 200 : 120)
               )
           )
         ) {
@@ -1832,11 +1833,11 @@ const getSellerApplicationStatus = async (req, res) => {
 
     const application = user.sellerApplication
       ? {
-          reason: user.sellerApplication.reason,
-          submittedAt: user.sellerApplication.submittedAt,
-          reviewedAt: user.sellerApplication.reviewedAt,
-          reviewNote: user.sellerApplication.reviewNote,
-        }
+        reason: user.sellerApplication.reason,
+        submittedAt: user.sellerApplication.submittedAt,
+        reviewedAt: user.sellerApplication.reviewedAt,
+        reviewNote: user.sellerApplication.reviewNote,
+      }
       : null;
 
     return res.status(200).json({

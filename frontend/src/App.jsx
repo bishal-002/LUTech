@@ -15,6 +15,7 @@ import Login from "./pages/public/Login";
 import Register from "./pages/public/Register";
 import VerifyOTP from "./pages/public/VerifyOTP";
 import AdminLogin from "./pages/public/AdminLogin";
+import AdminTwoFactor from "./pages/public/AdminTwoFactor";
 import NotFound from "./pages/public/NotFound";
 
 // Customer Pages
@@ -179,6 +180,7 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/verify-otp" element={<VerifyOTP />} />
         <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin/2fa" element={<AdminTwoFactor />} />
 
         {/* SELLER APPLICATION STATUS */}
         <Route

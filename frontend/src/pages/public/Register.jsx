@@ -117,7 +117,7 @@ function Register() {
 
       setMessage(
         response.message ||
-          "Registration successful. Please verify your email."
+        "Registration successful. Please verify your email."
       );
 
       setFormData({
@@ -130,12 +130,16 @@ function Register() {
       setAcceptedTerms(false);
 
       setTimeout(() => {
-        navigate("/verify-otp");
+        navigate("/verify-otp", {
+          state: {
+            email: formData.email.trim().toLowerCase(),
+          },
+        });
       }, 1500);
     } catch (err) {
       setError(
         err.response?.data?.message ||
-          "Registration failed. Please try again."
+        "Registration failed. Please try again."
       );
     } finally {
       setLoading(false);
@@ -424,11 +428,10 @@ function Register() {
 
           {formData.confirmPassword && (
             <p
-              className={`mt-1.5 text-xs font-medium ${
-                formData.password === formData.confirmPassword
+              className={`mt-1.5 text-xs font-medium ${formData.password === formData.confirmPassword
                   ? "text-[#287A50]"
                   : "text-red-600"
-              }`}
+                }`}
             >
               {formData.password === formData.confirmPassword
                 ? "Passwords match"
