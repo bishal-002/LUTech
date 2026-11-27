@@ -315,7 +315,7 @@ const loginUser = async (req, res) => {
         userId: user._id,
       })
         .select(
-          "_id adminRole department status security.twoFactorEnabled security.twoFactorMethod"
+          "_id adminRole permissions department status security.twoFactorEnabled security.twoFactorMethod"
         )
         .lean();
 
@@ -402,6 +402,14 @@ const loginUser = async (req, res) => {
         verificationStatus:
           user.verificationStatus || "not_submitted",
         isVerified: user.isVerified,
+
+        ...(adminProfile && {
+          adminProfileId: adminProfile._id,
+          adminRole: adminProfile.adminRole,
+          permissions: adminProfile.permissions || [],
+          department: adminProfile.department || null,
+          adminStatus: adminProfile.status,
+        }),
       },
     });
   } catch (error) {

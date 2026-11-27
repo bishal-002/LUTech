@@ -1,22 +1,18 @@
 
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 function AdminTopbar({ onMenuClick }) {
   const navigate = useNavigate();
-
-  const userInfo = (() => {
-    try {
-      return JSON.parse(localStorage.getItem("userInfo") || "{}");
-    } catch {
-      return {};
-    }
-  })();
+  const { user, logout } = useAuth();
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("userInfo");
+    logout();
     navigate("/admin/login", { replace: true });
   };
+
+  const displayName = user?.name || "Administrator";
+  const initials = displayName.charAt(0).toUpperCase();
 
   return (
     <header className="sticky top-0 z-30 border-b border-white/10 bg-[#092F30] text-white shadow-lg">
@@ -48,15 +44,16 @@ function AdminTopbar({ onMenuClick }) {
         <div className="flex items-center gap-3">
           <div className="hidden text-right sm:block">
             <p className="text-sm font-semibold">
-              {userInfo.name || "Administrator"}
+              {displayName}
             </p>
+
             <p className="text-xs text-[#B9F4E4]/60">
-              System Administrator
+              {user?.adminRole || "Administrator"}
             </p>
           </div>
 
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#83CDB5] font-bold text-[#062729]">
-            {(userInfo.name || "A").charAt(0).toUpperCase()}
+            {initials}
           </div>
 
           <button
