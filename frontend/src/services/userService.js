@@ -1,133 +1,141 @@
-import axios from "axios";
 
-const API_URL = "http://localhost:5000/api/users";
-
-const getAuthConfig = () => {
-  const token = localStorage.getItem("token");
-
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  };
-};
+import axiosClient from "../api/axiosClient";
 
 // ======================================================
-// EXISTING USER PROFILE SERVICES
+// GET USER PROFILE
+// GET /api/users/profile/:id
 // ======================================================
 
 export const getUserProfile = async (id) => {
-  const response = await axios.get(
-    `${API_URL}/profile/${id}`,
-    getAuthConfig()
-  );
-
-  return response.data;
-};
-
-export const updateUserProfile = async (id, userData) => {
-  const response = await axios.put(
-    `${API_URL}/profile/${id}`,
-    userData,
-    getAuthConfig()
-  );
-
-  return response.data;
-};
-
-export const deleteUserProfile = async (id) => {
-  const response = await axios.delete(
-    `${API_URL}/profile/${id}`,
-    getAuthConfig()
+  const response = await axiosClient.get(
+    `/users/profile/${id}`
   );
 
   return response.data;
 };
 
 // ======================================================
-// CUSTOMER PROFILE SERVICES
+// UPDATE USER PROFILE
+// PUT /api/users/profile/:id
+// ======================================================
+
+export const updateUserProfile = async (
+  id,
+  userData
+) => {
+  const response = await axiosClient.put(
+    `/users/profile/${id}`,
+    userData
+  );
+
+  return response.data;
+};
+
+// ======================================================
+// DELETE USER PROFILE
+// DELETE /api/users/profile/:id
+// ======================================================
+
+export const deleteUserProfile = async (id) => {
+  const response = await axiosClient.delete(
+    `/users/profile/${id}`
+  );
+
+  return response.data;
+};
+
+// ======================================================
+// GET CUSTOMER PROFILE
+// GET /api/users/customer/profile
 // ======================================================
 
 export const getCustomerProfile = async () => {
-  const response = await axios.get(
-    `${API_URL}/customer/profile`,
-    getAuthConfig()
-  );
-
-  return response.data;
-};
-
-export const updateCustomerProfile = async (customerData) => {
-  const response = await axios.put(
-    `${API_URL}/customer/profile`,
-    customerData,
-    getAuthConfig()
+  const response = await axiosClient.get(
+    "/users/customer/profile"
   );
 
   return response.data;
 };
 
 // ======================================================
-// WISHLIST SERVICES
+// UPDATE CUSTOMER PROFILE
+// PUT /api/users/customer/profile
 // ======================================================
 
-export const addToWishlist = async (
-  productId,
-  variantSku = ""
+export const updateCustomerProfile = async (
+  profileData
 ) => {
-  const response = await axios.post(
-    `${API_URL}/customer/wishlist`,
-    {
-      productId,
-      variantSku,
-    },
-    getAuthConfig()
+  const response = await axiosClient.put(
+    "/users/customer/profile",
+    profileData
   );
 
   return response.data;
 };
+
+// ======================================================
+// ADD PRODUCT TO WISHLIST
+// POST /api/users/customer/wishlist
+// ======================================================
+
+export const addToWishlist = async (productId) => {
+  const response = await axiosClient.post(
+    "/users/customer/wishlist",
+    { productId }
+  );
+
+  return response.data;
+};
+
+// ======================================================
+// REMOVE PRODUCT FROM WISHLIST
+// DELETE /api/users/customer/wishlist/:productId
+// ======================================================
 
 export const removeFromWishlist = async (productId) => {
-  const response = await axios.delete(
-    `${API_URL}/customer/wishlist/${productId}`,
-    getAuthConfig()
+  const response = await axiosClient.delete(
+    `/users/customer/wishlist/${productId}`
   );
 
   return response.data;
 };
 
 // ======================================================
-// PRICE ALERT SERVICES
+// ADD PRICE ALERT
+// POST /api/users/customer/price-alerts
 // ======================================================
 
 export const addPriceAlert = async (alertData) => {
-  const response = await axios.post(
-    `${API_URL}/customer/price-alerts`,
-    alertData,
-    getAuthConfig()
-  );
-
-  return response.data;
-};
-
-export const removePriceAlert = async (productId) => {
-  const response = await axios.delete(
-    `${API_URL}/customer/price-alerts/${productId}`,
-    getAuthConfig()
+  const response = await axiosClient.post(
+    "/users/customer/price-alerts",
+    alertData
   );
 
   return response.data;
 };
 
 // ======================================================
-// RECENTLY VIEWED SERVICES
+// REMOVE PRICE ALERT
+// DELETE /api/users/customer/price-alerts/:productId
+// ======================================================
+
+export const removePriceAlert = async (productId) => {
+  const response = await axiosClient.delete(
+    `/users/customer/price-alerts/${productId}`
+  );
+
+  return response.data;
+};
+
+// ======================================================
+// ADD RECENTLY VIEWED PRODUCT
+// POST /api/users/customer/recently-viewed
 // ======================================================
 
 export const addRecentlyViewed = async (productId) => {
-  const response = await axios.post(
-    `${API_URL}/customer/recently-viewed`,
-    { productId },
-    getAuthConfig()
+  const response = await axiosClient.post(
+    "/users/customer/recently-viewed",
+    { productId }
   );
 
   return response.data;

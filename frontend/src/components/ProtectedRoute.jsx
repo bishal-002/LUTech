@@ -1,50 +1,42 @@
 
 import { Navigate, Outlet } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
-function getUserInfo() {
-  try {
-    return JSON.parse(localStorage.getItem("userInfo") || "null");
-  } catch {
-    return null;
+function getRoleDestination(user) {
+  if (user?.role === "admin") {
+    return "/admin/dashboard";
   }
+
+  if (user?.role === "seller") {
+    const isApproved =
+      user.sellerStatus === "approved" ||
+      user.verificationStatus === "approved";
+
+    return isApproved ? "/seller/home" : "/seller/pending";
+  }
+
+  return "/";
 }
 
-function ProtectedRoute({ allowedRoles }) {
-  const token = localStorage.getItem("token");
-  const userInfo = getUserInfo();
+function ProtectedRoute({ allowedRoles = [] }) {
+  const { user, token, isAuthenticated } = useAuth();
 
-  if (!token || !userInfo) {
+  if (!isAuthenticated || !token || !user) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!allowedRoles.includes(userInfo.role)) {
-    if (userInfo.role === "admin") {
-      return <Navigate to="/admin/dashboard" replace />;
-    }
-
-    if (userInfo.role === "seller") {
-      return (
-        <Navigate
-          to={
-            userInfo.sellerStatus === "approved"
-              ? "/seller/home"
-              : "/seller/pending"
-          }
-          replace
-        />
-      );
-    }
-
-    return <Navigate to="/" replace />;
+  if (!allowedRoles.includes(user.role)) {
+    return (
+      <Navigate
+        to={getRoleDestination(user)}
+        replace
+      />
+    );
   }
 
-  if (
-    userInfo.role === "seller" &&
-    userInfo.sellerStatus !== "approved"
-  ) {
-    return <Navigate to="/seller/pending" replace />;
-  }
-
+  // Seller approval is checked separately by the seller
+  // workspace route in App.jsx. This component only checks
+  // authentication and role access.
   return <Outlet />;
 }
 
