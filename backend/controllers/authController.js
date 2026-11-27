@@ -37,7 +37,8 @@ const sendServerError = (res) =>
         message: "Authentication service error.",
     });
 
-const getPublicUser = (user) => ({
+
+const getPublicUser = (user, adminProfile = null) => ({
     _id: user._id,
     name: user.name,
     email: user.email,
@@ -46,7 +47,20 @@ const getPublicUser = (user) => ({
     verificationStatus:
         user.verificationStatus || "not_submitted",
     isVerified: user.isVerified,
+
+    // Include administrator profile information only
+    // after the backend has validated the active profile.
+    ...(adminProfile && {
+        adminProfileId: adminProfile._id,
+        adminRole: adminProfile.adminRole,
+        permissions: Array.isArray(adminProfile.permissions)
+            ? adminProfile.permissions
+            : [],
+        department: adminProfile.department || null,
+        adminStatus: adminProfile.status,
+    }),
 });
+
 
 const validateAccountStatus = (user, res) => {
     if (!user.isVerified) {
@@ -97,6 +111,7 @@ const isAdminIpAllowed = (profile, requestIp) => {
 // ISSUE ACCESS TOKEN AFTER ALL REQUIRED AUTHENTICATION
 // ======================================================
 
+
 const issueAccessToken = async (
     user,
     req,
@@ -133,9 +148,10 @@ const issueAccessToken = async (
     return {
         message: "Login successful.",
         token,
-        user: getPublicUser(user),
+        user: getPublicUser(user, adminProfile),
     };
 };
+
 
 // ======================================================
 // LOGIN
