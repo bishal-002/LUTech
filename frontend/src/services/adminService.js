@@ -214,3 +214,95 @@ export const deactivateCatalogCategory = async (categoryId) => {
   );
   return response.data;
 };
+
+
+// ======================================================
+// ADMIN DISPUTE MANAGEMENT
+// ======================================================
+
+export const getAdminDisputes = async (params = {}) => {
+  const response = await axiosClient.get("/admin/disputes", {
+    params,
+  });
+  return response.data;
+};
+
+export const getAdminDisputeDetails = async (disputeId) => {
+  const response = await axiosClient.get(
+    `/admin/disputes/${disputeId}`
+  );
+  return response.data;
+};
+
+export const sendAdminDisputeMessage = async (disputeId, message) => {
+  const response = await axiosClient.post(
+    `/admin/disputes/${disputeId}/messages`,
+    { message }
+  );
+  return response.data;
+};
+
+export const updateAdminDisputeStatus = async (
+  disputeId,
+  status,
+  note
+) => {
+  const response = await axiosClient.patch(
+    `/admin/disputes/${disputeId}/status`,
+    { status, note }
+  );
+  return response.data;
+};
+
+export const resolveAdminDispute = async (
+  disputeId,
+  decision,
+  note,
+  approvedAmount
+) => {
+  const payload = { decision, note };
+
+  if (decision === "refund" && approvedAmount !== undefined) {
+    payload.approvedAmount = Number(approvedAmount);
+  }
+
+  const response = await axiosClient.post(
+    `/admin/disputes/${disputeId}/resolve`,
+    payload
+  );
+  return response.data;
+};
+
+// ======================================================
+// ADMIN REFUND MANAGEMENT
+// ======================================================
+
+export const getAdminRefunds = async (params = {}) => {
+  const response = await axiosClient.get("/admin/refunds", {
+    params,
+  });
+  return response.data;
+};
+
+export const getAdminRefundDetails = async (refundId) => {
+  const response = await axiosClient.get(
+    `/admin/refunds/${refundId}`
+  );
+  return response.data;
+};
+
+export const completeAdminRefund = async (refundId, data) => {
+  const response = await axiosClient.patch(
+    `/admin/refunds/${refundId}/complete`,
+    data
+  );
+  return response.data;
+};
+
+export const failAdminRefund = async (refundId, failureReason) => {
+  const response = await axiosClient.patch(
+    `/admin/refunds/${refundId}/fail`,
+    { failureReason }
+  );
+  return response.data;
+};

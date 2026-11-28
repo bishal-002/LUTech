@@ -37,6 +37,16 @@ function AdminSidebar({ open, onNavigate }) {
             permission: null,
             anyPermissions: ["manage_brands", "manage_categories"],
         },
+        {
+            label: "Disputes & Refunds",
+            path: "/admin/disputes",
+            icon: "⚖",
+            permission: null,
+            anyPermissions: [
+                "manage_disputes",
+                "issue_refunds",
+            ],
+        },
     ];
 
     const visibleNavigation = navigation.filter((item) => {
