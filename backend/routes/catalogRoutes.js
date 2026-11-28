@@ -58,6 +58,12 @@ const requireEditCategorySchemasPermission =
     "edit_category_schemas"
   );
 
+const requireManageBrands =
+  requireAdminPermission("manage_brands");
+
+const requireManageCategories =
+  requireAdminPermission("manage_categories");
+
 const requireSchemaPermissionWhenPresent = (
   req,
   res,
@@ -145,11 +151,13 @@ router.use(
 
 router.get(
   "/admin/brands",
+  requireManageBrands,
   getAllBrandsAdmin
 );
 
 router.get(
   "/admin/categories",
+  requireManageCategories,
   getAllCategoriesAdmin
 );
 
@@ -159,25 +167,25 @@ router.get(
 
 router.get(
   "/admin/devices",
-  requireAdminPermission("manage_categories"),
+  requireManageCategories,
   getAllDevicesAdmin
 );
 
 router.post(
   "/admin/devices",
-  requireAdminPermission("manage_categories"),
+  requireManageCategories,
   createDevice
 );
 
 router.put(
   "/admin/devices/:id",
-  requireAdminPermission("manage_categories"),
+  requireManageCategories,
   updateDevice
 );
 
 router.patch(
   "/admin/devices/:id/deactivate",
-  requireAdminPermission("manage_categories"),
+  requireManageCategories,
   deactivateDevice
 );
 
@@ -189,6 +197,7 @@ router.post(
   "/brands",
   protect,
   adminOnly,
+  requireManageBrands,
   createBrand
 );
 
@@ -196,6 +205,7 @@ router.put(
   "/brands/:id",
   protect,
   adminOnly,
+  requireManageBrands,
   updateBrand
 );
 
@@ -203,6 +213,7 @@ router.delete(
   "/brands/:id",
   protect,
   adminOnly,
+  requireManageBrands,
   deactivateBrand
 );
 
@@ -210,27 +221,21 @@ router.delete(
 // ADMIN CATEGORY MANAGEMENT
 // ======================================================
 
-// Create category.
-// If a specification template is submitted,
-// edit_category_schemas permission is required.
-
 router.post(
   "/categories",
   protect,
   adminOnly,
+  requireManageCategories,
   requireSchemaPermissionWhenPresent,
   validateCategorySpecificationTemplate,
   createCategory
 );
 
-// Update category.
-// Ordinary category fields retain the existing behavior.
-// Schema changes require edit_category_schemas.
-
 router.put(
   "/categories/:id",
   protect,
   adminOnly,
+  requireManageCategories,
   requireSchemaPermissionWhenPresent,
   validateCategorySpecificationTemplate,
   updateCategory
@@ -240,6 +245,7 @@ router.delete(
   "/categories/:id",
   protect,
   adminOnly,
+  requireManageCategories,
   deactivateCategory
 );
 

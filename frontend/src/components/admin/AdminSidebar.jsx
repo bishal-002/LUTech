@@ -30,12 +30,31 @@ function AdminSidebar({ open, onNavigate }) {
             icon: "▣",
             permission: "approve_products",
         },
+        {
+            label: "Catalog Management",
+            path: "/admin/catalog",
+            icon: "▤",
+            permission: null,
+            anyPermissions: ["manage_brands", "manage_categories"],
+        },
     ];
 
-    const visibleNavigation = navigation.filter(
-        (item) =>
-            !item.permission || hasPermission(item.permission)
-    );
+    const visibleNavigation = navigation.filter((item) => {
+        if (item.permission && !hasPermission(item.permission)) {
+            return false;
+        }
+
+        if (
+            item.anyPermissions &&
+            !item.anyPermissions.some((permission) =>
+                hasPermission(permission)
+            )
+        ) {
+            return false;
+        }
+
+        return true;
+    });
 
     return (
         <aside
@@ -81,8 +100,8 @@ function AdminSidebar({ open, onNavigate }) {
                             <>
                                 <span
                                     className={`flex h-9 w-9 items-center justify-center rounded-lg text-lg ${isActive
-                                            ? "bg-[#062729]/10"
-                                            : "bg-[#062729]/60 text-[#B9F4E4]"
+                                        ? "bg-[#062729]/10"
+                                        : "bg-[#062729]/60 text-[#B9F4E4]"
                                         }`}
                                 >
                                     {item.icon}

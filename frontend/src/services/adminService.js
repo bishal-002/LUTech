@@ -158,3 +158,59 @@ export const deactivateAdminUser = async (userId) => {
 
   return response.data;
 };
+
+// ======================================================
+// ADMIN CATALOG MANAGEMENT
+// ======================================================
+
+// Brands
+export const getAdminBrands = async () => {
+  const response = await axiosClient.get("/catalog/admin/brands");
+  return response.data;
+};
+
+export const createCatalogBrand = async (data) => {
+  const response = await axiosClient.post("/catalog/brands", data);
+  return response.data;
+};
+
+export const updateCatalogBrand = async (brandId, data) => {
+  const response = await axiosClient.put(
+    `/catalog/brands/${brandId}`,
+    data
+  );
+  return response.data;
+};
+
+export const deactivateCatalogBrand = async (brandId) => {
+  const response = await axiosClient.delete(
+    `/catalog/brands/${brandId}`
+  );
+  return response.data;
+};
+
+// Categories
+export const getAdminCategories = async () => {
+  const response = await axiosClient.get("/catalog/admin/categories");
+  return response.data;
+};
+
+export const createCatalogCategory = async (data) => {
+  const response = await axiosClient.post("/catalog/categories", data);
+  return response.data;
+};
+
+export const updateCatalogCategory = async (categoryId, data) => {
+  const response = await axiosClient.put(
+    `/catalog/categories/${categoryId}`,
+    data
+  );
+  return response.data;
+};
+
+export const deactivateCatalogCategory = async (categoryId) => {
+  const response = await axiosClient.delete(
+    `/catalog/categories/${categoryId}`
+  );
+  return response.data;
+};
