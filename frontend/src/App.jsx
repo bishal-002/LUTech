@@ -32,6 +32,7 @@ import SellerProductForm from "./pages/seller/SellerProductForm";
 import SellerOrders from "./pages/seller/SellerOrders";
 import SellerStoreProfile from "./pages/seller/SellerStoreProfile";
 import SellerLayout from "./components/seller/SellerLayout";
+import SellerVerificationStatus from "./pages/seller/SellerVerificationStatus";
 
 // Route Protection
 import AdminRoute from "./components/AdminRoute";
@@ -190,36 +191,25 @@ function App() {
         <Route path="/admin/2fa" element={<AdminTwoFactor />} />
 
         {/* SELLER APPLICATION STATUS */}
-        <Route
-          path="/seller/pending"
-          element={<SellerPendingRoute />}
-        />
+        <Route path="/seller/pending" element={<SellerPendingRoute />} />
+        {/* Seller KYC: available to customer and seller applicants */}
+        <Route element={<ProtectedRoute allowedRoles={["customer", "seller"]} />} >
+          <Route path="/seller/verification-status" element={<SellerVerificationStatus />} />
+        </Route>
 
         {/* APPROVED SELLER WORKSPACE */}
         <Route element={<ProtectedRoute allowedRoles={["seller"]} />}>
           <Route element={<ApprovedSellerRoute />}>
             <Route path="/seller" element={<SellerLayout />}>
-              <Route
-                index
-                element={<Navigate to="home" replace />}
-              />
+              <Route index element={<Navigate to="home" replace />} />
 
               <Route path="home" element={<SellerHome />} />
               <Route path="dashboard" element={<SellerDashboard />} />
               <Route path="products" element={<SellerProducts />} />
-              <Route
-                path="products/add"
-                element={<SellerProductForm />}
-              />
-              <Route
-                path="products/edit/:id"
-                element={<SellerProductForm />}
-              />
+              <Route path="products/add" element={<SellerProductForm />} />
+              <Route path="products/edit/:id" element={<SellerProductForm />} />
               <Route path="orders" element={<SellerOrders />} />
-              <Route
-                path="store-profile"
-                element={<SellerStoreProfile />}
-              />
+              <Route path="store-profile" element={<SellerStoreProfile />} />
             </Route>
           </Route>
         </Route>

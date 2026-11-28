@@ -9,6 +9,7 @@ const navigation = [
   { label: "Add Product", path: "/seller/products/add", icon: "+" },
   { label: "Orders", path: "/seller/orders", icon: "▤" },
   { label: "Store Profile", path: "/seller/store-profile", icon: "▣" },
+  { label: "Verification & KYC", path: "/seller/verification-status", icon: "✓" },
 ];
 
 function SellerSidebar({ open, onClose }) {
