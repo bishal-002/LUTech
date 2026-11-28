@@ -306,3 +306,32 @@ export const failAdminRefund = async (refundId, failureReason) => {
   );
   return response.data;
 };
+
+// ======================================================
+// ADMIN PAYOUT MANAGEMENT
+// ======================================================
+
+export const getAdminPayoutSummary = async () => {
+  const response = await axiosClient.get("/admin/payouts/summary");
+  return response.data;
+};
+
+export const getAdminPayouts = async (params = {}) => {
+  const response = await axiosClient.get("/admin/payouts", {
+    params,
+  });
+  return response.data;
+};
+
+export const getAdminPayoutDetails = async (payoutId) => {
+  const response = await axiosClient.get(`/admin/payouts/${payoutId}`);
+  return response.data;
+};
+
+export const processAdminPayout = async (payoutId, data) => {
+  const response = await axiosClient.put(
+    `/admin/payouts/${payoutId}/process`,
+    data
+  );
+  return response.data;
+};

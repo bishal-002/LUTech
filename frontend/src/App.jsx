@@ -44,6 +44,7 @@ import AdminSellerApplications from "./pages/admin/AdminSellerApplications";
 import AdminProductModeration from "./pages/admin/AdminProductModeration";
 import AdminCatalog from "./pages/admin/AdminCatalog";
 import AdminDisputes from "./pages/admin/AdminDisputes";
+import AdminPayouts from "./pages/admin/AdminPayouts";
 
 // Get logged-in user information
 function getUserInfo() {
@@ -229,6 +230,7 @@ function App() {
           <Route path="/admin/product-moderation" element={<AdminProductModeration />} />
           <Route path="/admin/catalog" element={<AdminCatalog />} />
           <Route path="/admin/disputes" element={<AdminDisputes />} />
+          <Route path="/admin/payouts" element={<AdminPayouts />} />
         </Route>
 
 
