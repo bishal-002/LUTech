@@ -352,3 +352,61 @@ export const updatePlatformSettings = async (data) => {
   );
   return response.data;
 };
+
+
+// ======================================================
+// ADMIN TEAM MANAGEMENT
+// ======================================================
+
+export const getAdminProfiles = async (params = {}) => {
+  const response = await axiosClient.get("/admin/profiles", { params });
+  return response.data;
+};
+
+export const getAdminProfileDetails = async (profileId) => {
+  const response = await axiosClient.get(`/admin/profiles/${profileId}`);
+  return response.data;
+};
+
+export const createAdminProfile = async (data) => {
+  const response = await axiosClient.post("/admin/profiles", data);
+  return response.data;
+};
+
+export const updateAdminProfile = async (profileId, data) => {
+  const response = await axiosClient.patch(
+    `/admin/profiles/${profileId}`,
+    data
+  );
+  return response.data;
+};
+
+export const updateAdminProfileStatus = async (profileId, data) => {
+  const response = await axiosClient.patch(
+    `/admin/profiles/${profileId}/status`,
+    data
+  );
+  return response.data;
+};
+
+export const updateAdminProfileSecurity = async (profileId, data) => {
+  const response = await axiosClient.patch(
+    `/admin/profiles/${profileId}/security`,
+    data
+  );
+  return response.data;
+};
+
+// ======================================================
+// ADMIN AUDIT LOGS
+// ======================================================
+
+export const getAdminAuditLogs = async (params = {}) => {
+  const response = await axiosClient.get("/admin/audit-logs", { params });
+  return response.data;
+};
+
+export const getAdminAuditLogDetails = async (logId) => {
+  const response = await axiosClient.get(`/admin/audit-logs/${logId}`);
+  return response.data;
+};

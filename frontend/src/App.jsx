@@ -46,6 +46,8 @@ import AdminCatalog from "./pages/admin/AdminCatalog";
 import AdminDisputes from "./pages/admin/AdminDisputes";
 import AdminPayouts from "./pages/admin/AdminPayouts";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminTeam from "./pages/admin/AdminTeam";
+import AdminAuditLogs from "./pages/admin/AdminAuditLogs";
 
 // Get logged-in user information
 function getUserInfo() {
@@ -233,6 +235,8 @@ function App() {
           <Route path="/admin/disputes" element={<AdminDisputes />} />
           <Route path="/admin/payouts" element={<AdminPayouts />} />
           <Route path="/admin/settings" element={<AdminSettings />} />
+          <Route path="/admin/team" element={<AdminTeam />} />
+          <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
         </Route>
 
 
