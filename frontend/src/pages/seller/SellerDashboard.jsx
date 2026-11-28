@@ -1,672 +1,465 @@
 
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import axios from "axios";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { getMyProducts } from "../../services/productService";
+import {
+  getSellerDashboard,
+  getSellerOrders,
+} from "../../services/sellerService";
 
-const API_URL = "http://localhost:5000/api/seller";
+const formatMoney = (amount) =>
+  `৳${Number(amount || 0).toLocaleString("en-BD", {
+    maximumFractionDigits: 2,
+  })}`;
 
-// Demo data until analytics APIs are implemented.
-const DEMO_STATS = [
-  {
-    label: "Total Sales",
-    value: "৳1,28,400",
-    detail: "Demo performance data",
-    change: "+11.2%",
-    icon: "sales",
-  },
-  {
-    label: "Total Products",
-    value: "24",
-    detail: "Sample product count",
-    change: "+3",
-    icon: "products",
-  },
-  {
-    label: "Total Orders",
-    value: "86",
-    detail: "Sample order count",
-    change: "+8.4%",
-    icon: "orders",
-  },
-  {
-    label: "Customers",
-    value: "52",
-    detail: "Sample customer count",
-    change: "+5.2%",
-    icon: "customers",
-  },
-];
+const formatDate = (date) => {
+  if (!date) return "—";
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime())
+    ? "—"
+    : parsed.toLocaleDateString("en-BD", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+};
 
-const DEMO_PRODUCTS = [
-  { name: "Wireless Headphones", category: "Electronics", price: 2450, stock: 18, sales: 32, status: "Active" },
-  { name: "Smart Watch", category: "Electronics", price: 3200, stock: 12, sales: 27, status: "Active" },
-  { name: "Casual Backpack", category: "Accessories", price: 1850, stock: 5, sales: 19, status: "Low Stock" },
-  { name: "Cotton T-Shirt", category: "Fashion", price: 850, stock: 0, sales: 8, status: "Out of Stock" },
-  { name: "Bluetooth Speaker", category: "Electronics", price: 1650, stock: 22, sales: 15, status: "Active" },
-];
+const getOrderId = (id) => String(id || "").slice(-8).toUpperCase();
 
-const DEMO_ACTIVITIES = [
-  {
-    title: "New order received",
-    description: "Order #LUT-2048 was placed.",
-    time: "10 minutes ago",
-    icon: "order",
-  },
-  {
-    title: "Product stock running low",
-    description: "Casual Backpack has only 5 units left.",
-    time: "1 hour ago",
-    icon: "stock",
-  },
-  {
-    title: "Product added",
-    description: "Bluetooth Speaker was added to the catalog.",
-    time: "Yesterday",
-    icon: "product",
-  },
-];
+const getProductStock = (product) => {
+  if (!Array.isArray(product.variants)) return 0;
 
-function formatPrice(value) {
-  return `৳${Number(value || 0).toLocaleString("en-BD")}`;
-}
+  return product.variants.reduce(
+    (total, variant) =>
+      total + Math.max(0, Number(variant.stockQuantity || 0)),
+    0
+  );
+};
 
-function DashboardIcon({ type, className = "h-5 w-5" }) {
-  const icons = {
-    sales: (
-      <>
-        <path d="M3 17 9 11l4 4 8-9" />
-        <path d="M15 6h6v6" />
-      </>
-    ),
-    products: (
-      <>
-        <path d="m12 2 9 5-9 5-9-5 9-5Z" />
-        <path d="m3 7 9 5 9-5M3 7v10l9 5 9-5V7M12 12v10" />
-      </>
-    ),
-    orders: (
-      <>
-        <rect x="4" y="3" width="16" height="18" rx="2" />
-        <path d="M8 8h8M8 12h8M8 16h5" />
-      </>
-    ),
-    customers: (
-      <>
-        <circle cx="9" cy="8" r="4" />
-        <path d="M2 21v-2a7 7 0 0 1 14 0v2M16 4a4 4 0 0 1 0 8m2 2a6 6 0 0 1 4 5v2" />
-      </>
-    ),
-    order: (
-      <>
-        <path d="M4 4h16v16H4z" />
-        <path d="M8 8h8M8 12h8M8 16h5" />
-      </>
-    ),
-    stock: (
-      <>
-        <path d="m12 2 10 18H2L12 2Z" />
-        <path d="M12 9v5m0 3h.01" />
-      </>
-    ),
-    product: (
-      <>
-        <path d="m12 2 9 5-9 5-9-5 9-5Z" />
-        <path d="M3 7v10l9 5 9-5V7" />
-      </>
-    ),
-  };
+const statusStyles = {
+  pending: "bg-amber-100 text-amber-800",
+  confirmed: "bg-sky-100 text-sky-800",
+  processing: "bg-indigo-100 text-indigo-800",
+  shipped: "bg-violet-100 text-violet-800",
+  delivered: "bg-emerald-100 text-emerald-800",
+  refused: "bg-rose-100 text-rose-800",
+  cancelled: "bg-slate-100 text-slate-700",
+};
 
+function MetricCard({ label, value, description, icon }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      {icons[type]}
-    </svg>
+    <article className="rounded-2xl border border-[#E6ECE8] bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-[#718078]">{label}</p>
+          <p className="mt-3 break-words text-2xl font-extrabold tracking-tight text-[#173D36] sm:text-3xl">
+            {value}
+          </p>
+          <p className="mt-1 text-xs text-[#89958F]">{description}</p>
+        </div>
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#E7F5EF] text-xl text-[#25845F]">
+          {icon}
+        </div>
+      </div>
+    </article>
   );
 }
 
-function StatCard({ item }) {
+function SectionHeading({ title, description, action, to }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-white/10 bg-[#153B3C] p-4 shadow-sm transition hover:border-[#78CBB5]/40 sm:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-[#B9F4E4]">
-          <DashboardIcon type={item.icon} />
-        </div>
-
-        <span className="rounded-full bg-[#B9F4E4]/10 px-2 py-1 text-[10px] font-bold text-[#B9F4E4]">
-          DEMO
-        </span>
+    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+      <div>
+        <h2 className="text-lg font-bold text-[#173D36]">{title}</h2>
+        {description && (
+          <p className="mt-1 text-sm text-[#839088]">{description}</p>
+        )}
       </div>
-
-      <p className="mt-5 text-xs font-medium text-[#A9C4BE]">
-        {item.label}
-      </p>
-
-      <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
-        <h3 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-          {item.value}
-        </h3>
-
-        <span className="text-xs font-semibold text-[#8BE5CC]">
-          ↗ {item.change}
-        </span>
-      </div>
-
-      <p className="mt-2 text-[10px] text-[#78938C]">
-        {item.detail}
-      </p>
+      {action && (
+        <Link
+          to={to}
+          className="w-fit text-sm font-semibold text-[#1D7055] hover:underline"
+        >
+          {action} →
+        </Link>
+      )}
     </div>
   );
 }
 
-function SalesChart() {
-  const [period, setPeriod] = useState("Monthly");
-
-  const chartData = {
-    Daily: {
-      primary: "M20 105 L85 80 L150 90 L215 48 L280 62 L345 28 L410 45 L475 18",
-      secondary: "M20 145 L85 132 L150 140 L215 112 L280 120 L345 95 L410 108 L475 90",
-      labels: ["9 AM", "11 AM", "1 PM", "3 PM", "5 PM", "7 PM"],
-    },
-    Weekly: {
-      primary: "M20 120 L85 90 L150 105 L215 45 L280 68 L345 32 L410 50 L475 18",
-      secondary: "M20 155 L85 140 L150 146 L215 115 L280 125 L345 98 L410 112 L475 85",
-      labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    },
-    Monthly: {
-      primary: "M20 120 L85 80 L150 96 L215 40 L280 65 L345 28 L410 52 L475 18",
-      secondary: "M20 158 L85 135 L150 143 L215 110 L280 126 L345 98 L410 115 L475 88",
-      labels: ["1 Jun", "5 Jun", "10 Jun", "15 Jun", "20 Jun", "25 Jun"],
-    },
-  };
-
-  const active = chartData[period];
-
-  return (
-    <section className="min-w-0 rounded-2xl border border-[#E5E9E5] bg-white p-4 shadow-sm sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-bold text-[#20332B]">
-            Sales Analytics
-          </h2>
-          <p className="mt-1 text-xs text-[#89958D]">
-            Revenue performance overview
-          </p>
-        </div>
-
-        <div className="flex items-center gap-1 rounded-lg bg-[#F0F4F1] p-1">
-          {["Daily", "Weekly", "Monthly"].map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setPeriod(item)}
-              className={`rounded-md px-2.5 py-2 text-[10px] font-semibold transition sm:px-3 ${
-                period === item
-                  ? "bg-[#1A2E26] text-white shadow-sm"
-                  : "text-[#68766F] hover:text-[#1A2E26]"
-              }`}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs text-[#89958D]">
-            Total revenue
-            <span className="ml-2 rounded bg-[#FFF0E9] px-1.5 py-0.5 text-[9px] font-bold text-[#B9533B]">
-              DEMO
-            </span>
-          </p>
-          <p className="mt-1 text-2xl font-extrabold text-[#20332B]">
-            ৳1,28,400
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-4 text-[10px] text-[#68766F]">
-          <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-[#1A2E26]" />
-            This period
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-[#E07A5F]" />
-            Previous period
-          </span>
-        </div>
-      </div>
-
-      <div className="mt-5 w-full min-w-0 overflow-hidden">
-        <svg
-          viewBox="0 0 500 190"
-          className="h-auto w-full"
-          role="img"
-          aria-label={`${period} demo sales comparison chart`}
-        >
-          <defs>
-            <linearGradient id="salesArea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#1A2E26" stopOpacity=".18" />
-              <stop offset="100%" stopColor="#1A2E26" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-
-          {[30, 70, 110, 150].map((y) => (
-            <line
-              key={y}
-              x1="20"
-              y1={y}
-              x2="480"
-              y2={y}
-              stroke="#E9EEEA"
-              strokeDasharray="4 5"
-            />
-          ))}
-
-          <path
-            d={`${active.primary} L475 170 L20 170 Z`}
-            fill="url(#salesArea)"
-          />
-
-          <path
-            d={active.secondary}
-            fill="none"
-            stroke="#E07A5F"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          <path
-            d={active.primary}
-            fill="none"
-            stroke="#1A2E26"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          {active.primary.match(/-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?/g)?.map(
-            (point, index) => {
-              const [x, y] = point.split(" ").map(Number);
-
-              return (
-                <circle
-                  key={index}
-                  cx={x}
-                  cy={y}
-                  r="3.5"
-                  fill="white"
-                  stroke="#1A2E26"
-                  strokeWidth="2"
-                />
-              );
-            }
-          )}
-        </svg>
-
-        <div className="mt-1 flex justify-between gap-2 text-[9px] text-[#89958D] sm:text-[10px]">
-          {active.labels.map((label) => (
-            <span key={label}>{label}</span>
-          ))}
-        </div>
-      </div>
-
-      <p className="mt-4 rounded-lg bg-[#F4F6F4] px-3 py-2 text-[10px] leading-5 text-[#68766F]">
-        Demo visualization. Live sales analytics will be connected to
-        the seller API later.
-      </p>
-    </section>
-  );
-}
-
 function SellerDashboard() {
-  const navigate = useNavigate();
-
   const [seller, setSeller] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const [dashboardResponse, productsResponse, ordersResponse] =
+        await Promise.all([
+          getSellerDashboard(),
+          getMyProducts({ params: { page: 1, limit: 100 } }),
+          getSellerOrders(),
+        ]);
+
+      setSeller(dashboardResponse.seller || null);
+      setProducts(productsResponse.products || []);
+      setOrders(ordersResponse.orders || []);
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Unable to load your seller dashboard. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const fetchDashboard = async () => {
-      try {
-        const token = localStorage.getItem("token");
+    loadDashboard();
+  }, [loadDashboard]);
 
-        if (!token) {
-          navigate("/login", { replace: true });
-          return;
-        }
+  const metrics = useMemo(() => {
+    const pending = orders.filter(
+      (order) => order.status === "pending"
+    ).length;
 
-        const response = await axios.get(`${API_URL}/dashboard`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+    const activeOrders = orders.filter((order) =>
+      ["confirmed", "processing", "shipped"].includes(order.status)
+    ).length;
 
-        setSeller(response.data.seller);
-      } catch (err) {
-        if (err.response?.status === 401 || err.response?.status === 403) {
-          navigate("/login", { replace: true });
-        } else {
-          setError(
-            err.response?.data?.message ||
-              "Unable to load your dashboard. Please try again."
-          );
-        }
-      } finally {
-        setLoading(false);
-      }
+    const deliveredOrders = orders.filter(
+      (order) => order.status === "delivered"
+    );
+
+    const deliveredOrderValue = deliveredOrders.reduce(
+      (total, order) => total + Number(order.totalAmount || 0),
+      0
+    );
+
+    const lowStock = products.filter((product) => {
+      const stock = getProductStock(product);
+      return stock > 0 && stock <= 5;
+    }).length;
+
+    const outOfStock = products.filter(
+      (product) => getProductStock(product) === 0
+    ).length;
+
+    const customers = new Set(
+      orders
+        .map((order) => order.customerId?._id)
+        .filter(Boolean)
+        .map(String)
+    );
+
+    return {
+      totalProducts: products.length,
+      totalOrders: orders.length,
+      pending,
+      activeOrders,
+      deliveredOrders: deliveredOrders.length,
+      deliveredOrderValue,
+      lowStock,
+      outOfStock,
+      customers: customers.size,
     };
+  }, [products, orders]);
 
-    fetchDashboard();
-  }, [navigate]);
+  const recentOrders = useMemo(
+    () =>
+      [...orders]
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+        )
+        .slice(0, 5),
+    [orders]
+  );
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("userInfo");
-    navigate("/login", { replace: true });
-  };
+  const recentProducts = useMemo(
+    () =>
+      [...products]
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+        )
+        .slice(0, 5),
+    [products]
+  );
 
   if (loading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center rounded-2xl border border-white/10 bg-[#153B3C]">
+      <div className="flex min-h-[55vh] items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-white/10 border-t-[#B9F4E4]" />
-          <p className="mt-4 text-sm text-[#B7CCC7]">
-            Loading your seller dashboard...
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-[#315B53] border-t-[#83CDB5]" />
+          <p className="mt-4 text-sm text-[#B5C9C1]">
+            Loading your business dashboard...
           </p>
         </div>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div
-        role="alert"
-        className="rounded-2xl border border-red-300/20 bg-[#153B3C] p-6 sm:p-8"
-      >
-        <h2 className="text-lg font-bold text-white">
-          Unable to load dashboard
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-[#B7CCC7]">
-          {error}
-        </p>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="mt-5 rounded-lg bg-[#B9F4E4] px-5 py-2.5 text-sm font-bold text-[#062729]"
-        >
-          Try Again
-        </button>
-      </div>
-    );
-  }
-
-  const sellerName = seller?.name || "Seller";
-
   return (
-    <div className="min-w-0 space-y-6">
-      {/* Welcome section */}
-      <section className="rounded-2xl border border-white/10 bg-[#103738] p-5 sm:p-6 lg:p-7">
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-[#A9C4BE]">
-              Seller workspace
+    <div className="space-y-7">
+      <section className="relative overflow-hidden rounded-3xl border border-[#315B53] bg-gradient-to-br from-[#17483F] to-[#0B302E] p-6 sm:p-9">
+        <div className="pointer-events-none absolute -right-12 -top-16 h-64 w-64 rounded-full border-[35px] border-[#83CDB5]/10" />
+        <div className="relative flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#83CDB5]">
+              Seller Business Overview
             </p>
-
-            <h2 className="mt-2 break-words text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-              Hello, {sellerName}!
-            </h2>
-
-            <p className="mt-2 text-sm leading-6 text-[#A9C4BE]">
-              Here's an overview of your store and business activity.
+            <h1 className="mt-3 text-2xl font-extrabold text-white sm:text-3xl">
+              Welcome{seller?.name ? `, ${seller.name}` : " back"}
+            </h1>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-[#B5C9C1]">
+              Here's an overview of your products, orders and store activity.
             </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-[#83CDB5]/30 bg-[#83CDB5]/10 px-3 py-1 text-xs font-semibold text-[#A6E4CD]">
+                Seller: {seller?.sellerStatus || "—"}
+              </span>
+              <span className="rounded-full border border-[#83CDB5]/30 bg-[#83CDB5]/10 px-3 py-1 text-xs font-semibold text-[#A6E4CD]">
+                Verification: {seller?.verificationStatus || "—"}
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#8BE5CC]/20 bg-[#8BE5CC]/10 px-3 py-2 text-xs font-semibold text-[#B9F4E4]">
-              <span className="h-2 w-2 rounded-full bg-[#8BE5CC]" />
-              Approved Seller
-            </span>
-
+          <div className="flex flex-wrap gap-3">
             <Link
               to="/seller/products/add"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#B9F4E4] px-4 py-2.5 text-xs font-bold text-[#062729] transition hover:bg-white"
+              className="rounded-xl bg-[#83CDB5] px-5 py-3 text-sm font-bold text-[#123B35] transition hover:bg-[#A1DEC9]"
             >
-              <span className="text-base">+</span>
-              Add Product
+              + Add Product
+            </Link>
+            <Link
+              to="/seller/orders"
+              className="rounded-xl border border-[#83CDB5]/40 bg-white/5 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10"
+            >
+              View Orders
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Statistics */}
-      <section>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold text-white">
-            Business Overview
-          </h2>
-          <span className="text-[10px] text-[#78938C]">
-            Sample analytics · Demo data
-          </span>
+      {error && (
+        <div
+          role="alert"
+          className="flex flex-col justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 sm:flex-row sm:items-center"
+        >
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={loadDashboard}
+            className="w-fit font-semibold underline"
+          >
+            Try again
+          </button>
         </div>
+      )}
 
-        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {DEMO_STATS.map((item) => (
-            <StatCard key={item.label} item={item} />
-          ))}
-        </div>
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Total Products"
+          value={metrics.totalProducts}
+          description="Your product listings"
+          icon="◇"
+        />
+        <MetricCard
+          label="Total Orders"
+          value={metrics.totalOrders}
+          description="Orders containing your products"
+          icon="▤"
+        />
+        <MetricCard
+          label="Pending Orders"
+          value={metrics.pending}
+          description={`${metrics.activeOrders} confirmed, processing or shipped`}
+          icon="◷"
+        />
+        <MetricCard
+          label="Delivered Order Value"
+          value={formatMoney(metrics.deliveredOrderValue)}
+          description={`${metrics.deliveredOrders} delivered orders · COD order value, not payout`}
+          icon="৳"
+        />
       </section>
 
-      {/* Analytics and Product Overview */}
-      <div className="grid min-w-0 grid-cols-1 gap-5 2xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <SalesChart />
+      <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-2xl border border-[#E6ECE8] bg-white p-5 shadow-sm sm:p-6">
+          <SectionHeading
+            title="Recent Orders"
+            description="The latest orders assigned to your store."
+            action="View all orders"
+            to="/seller/orders"
+          />
 
-        {/* Product performance */}
-        <section className="min-w-0 overflow-hidden rounded-2xl border border-[#E5E9E5] bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E9E5] p-4 sm:p-5">
-            <div>
-              <h2 className="text-base font-bold text-[#20332B]">
-                Product Overview
-              </h2>
-              <p className="mt-1 text-xs text-[#89958D]">
-                Sample product performance
-              </p>
+          <div className="mt-5 space-y-3">
+            {recentOrders.length === 0 ? (
+              <div className="rounded-xl bg-[#F7F9F7] p-8 text-center">
+                <p className="font-semibold text-[#344B40]">No orders yet</p>
+                <p className="mt-1 text-sm text-[#839088]">
+                  Customer orders will appear here.
+                </p>
+              </div>
+            ) : (
+              recentOrders.map((order) => (
+                <div
+                  key={order._id}
+                  className="flex flex-col justify-between gap-3 rounded-xl border border-[#EDF1ED] p-4 sm:flex-row sm:items-center"
+                >
+                  <div className="min-w-0">
+                    <p className="font-bold text-[#173D36]">
+                      Order #{getOrderId(order._id)}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-[#839088]">
+                      {order.shippingName ||
+                        order.customerId?.name ||
+                        "Customer"}
+                      {" · "}
+                      {formatDate(order.createdAt)}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 sm:justify-end">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                        statusStyles[order.status] ||
+                        "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {order.status || "Unknown"}
+                    </span>
+                    <span className="text-sm font-bold text-[#21845F]">
+                      {formatMoney(order.totalAmount)}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          <section className="rounded-2xl border border-[#E6ECE8] bg-white p-5 shadow-sm sm:p-6">
+            <h2 className="font-bold text-[#173D36]">Inventory Overview</h2>
+            <p className="mt-1 text-sm text-[#839088]">
+              Stock quantities across your product variants.
+            </p>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-[#F1F8F4] p-4">
+                <p className="text-xs text-[#718078]">Low stock</p>
+                <p className="mt-2 text-2xl font-extrabold text-amber-700">
+                  {metrics.lowStock}
+                </p>
+              </div>
+              <div className="rounded-xl bg-[#FFF3F1] p-4">
+                <p className="text-xs text-[#718078]">Out of stock</p>
+                <p className="mt-2 text-2xl font-extrabold text-rose-700">
+                  {metrics.outOfStock}
+                </p>
+              </div>
             </div>
 
             <Link
               to="/seller/products"
-              className="text-xs font-bold text-[#1A2E26] hover:text-[#B9533B]"
+              className="mt-4 inline-flex text-sm font-semibold text-[#1D7055] hover:underline"
             >
-              View All →
+              Manage inventory →
+            </Link>
+          </section>
+
+          <section className="rounded-2xl border border-[#E6ECE8] bg-white p-5 shadow-sm sm:p-6">
+            <h2 className="font-bold text-[#173D36]">Business Snapshot</h2>
+            <div className="mt-4 space-y-3">
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-[#839088]">Unique customers</span>
+                <strong className="text-[#173D36]">{metrics.customers}</strong>
+              </div>
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-[#839088]">Delivered orders</span>
+                <strong className="text-[#173D36]">{metrics.deliveredOrders}</strong>
+              </div>
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-[#839088]">Active orders</span>
+                <strong className="text-[#173D36]">{metrics.activeOrders}</strong>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-[#E6ECE8] bg-white p-5 shadow-sm sm:p-6">
+        <SectionHeading
+          title="Recently Added Products"
+          description="Your latest product listings."
+          action="Manage products"
+          to="/seller/products"
+        />
+
+        {recentProducts.length === 0 ? (
+          <div className="mt-5 rounded-xl bg-[#F7F9F7] p-8 text-center">
+            <p className="font-semibold text-[#344B40]">No products yet</p>
+            <p className="mt-1 text-sm text-[#839088]">
+              Add your first product to start building your catalog.
+            </p>
+            <Link
+              to="/seller/products/add"
+              className="mt-4 inline-flex rounded-xl bg-[#1D7055] px-4 py-2.5 text-sm font-semibold text-white"
+            >
+              Add your first product
             </Link>
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[570px] text-left">
-              <thead className="bg-[#F4F6F4]">
-                <tr className="text-[10px] font-semibold uppercase tracking-wider text-[#89958D]">
-                  <th className="px-4 py-3">Product</th>
-                  <th className="px-4 py-3">Price</th>
-                  <th className="px-4 py-3">Stock</th>
-                  <th className="px-4 py-3">Sales</th>
-                  <th className="px-4 py-3">Status</th>
+        ) : (
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[600px] text-left">
+              <thead>
+                <tr className="border-b border-[#EAF0EC] text-xs uppercase tracking-wider text-[#839088]">
+                  <th className="px-3 py-3">Product</th>
+                  <th className="px-3 py-3">Variants</th>
+                  <th className="px-3 py-3">Stock</th>
+                  <th className="px-3 py-3">Moderation</th>
+                  <th className="px-3 py-3">Added</th>
                 </tr>
               </thead>
-
-              <tbody className="divide-y divide-[#E5E9E5]">
-                {DEMO_PRODUCTS.map((product) => (
-                  <tr
-                    key={product.name}
-                    className="text-xs transition hover:bg-[#F9FAF9]"
-                  >
-                    <td className="px-4 py-4">
-                      <p className="font-semibold text-[#20332B]">
-                        {product.name}
-                      </p>
-                      <p className="mt-1 text-[10px] text-[#89958D]">
-                        {product.category}
-                      </p>
+              <tbody className="divide-y divide-[#EDF1ED]">
+                {recentProducts.map((product) => (
+                  <tr key={product._id} className="text-sm text-[#344B40]">
+                    <td className="px-3 py-4 font-semibold">
+                      {product.title || "Untitled product"}
                     </td>
-
-                    <td className="whitespace-nowrap px-4 py-4 font-semibold text-[#20332B]">
-                      {formatPrice(product.price)}
+                    <td className="px-3 py-4">
+                      {product.variants?.length || 0}
                     </td>
-
-                    <td className="px-4 py-4 text-[#68766F]">
-                      {product.stock}
-                    </td>
-
-                    <td className="px-4 py-4 text-[#68766F]">
-                      {product.sales}
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <span
-                        className={`whitespace-nowrap rounded-full px-2 py-1 text-[9px] font-bold ${
-                          product.status === "Active"
-                            ? "bg-green-50 text-green-700"
-                            : product.status === "Low Stock"
-                              ? "bg-amber-50 text-amber-700"
-                              : "bg-red-50 text-red-700"
-                        }`}
-                      >
-                        {product.status}
+                    <td className="px-3 py-4">{getProductStock(product)}</td>
+                    <td className="px-3 py-4">
+                      <span className="rounded-full bg-[#F1F5F2] px-2.5 py-1 text-xs font-semibold capitalize">
+                        {(product.moderationStatus || "unknown").replaceAll("_", " ")}
                       </span>
+                    </td>
+                    <td className="px-3 py-4 text-xs text-[#839088]">
+                      {formatDate(product.createdAt)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        )}
+      </section>
 
-          <div className="border-t border-[#E5E9E5] px-4 py-3">
-            <p className="text-[10px] text-[#89958D]">
-              Sample products and performance figures. Not connected to
-              your product database yet.
-            </p>
-          </div>
-        </section>
-      </div>
-
-      {/* Bottom panels */}
-      <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-2">
-        {/* Recent activity */}
-        <section className="min-w-0 rounded-2xl border border-[#E5E9E5] bg-white p-4 shadow-sm sm:p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-[#20332B]">
-                Recent Activity
-              </h2>
-              <p className="mt-1 text-xs text-[#89958D]">
-                Latest store updates
-              </p>
-            </div>
-
-            <span className="rounded-full bg-[#FFF0E9] px-2.5 py-1 text-[9px] font-bold text-[#B9533B]">
-              DEMO
-            </span>
-          </div>
-
-          <div className="mt-5 space-y-4">
-            {DEMO_ACTIVITIES.map((activity, index) => (
-              <div
-                key={activity.title}
-                className="flex min-w-0 items-start gap-3"
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#E5EDE7] text-[#1A2E26]">
-                  <DashboardIcon
-                    type={activity.icon}
-                    className="h-4 w-4"
-                  />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-[#20332B]">
-                    {activity.title}
-                  </p>
-                  <p className="mt-1 break-words text-[11px] leading-5 text-[#68766F]">
-                    {activity.description}
-                  </p>
-                  <p className="mt-1 text-[10px] text-[#89958D]">
-                    {activity.time}
-                  </p>
-                </div>
-
-                {index !== DEMO_ACTIVITIES.length - 1 && null}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Account information */}
-        <section className="min-w-0 rounded-2xl border border-[#E5E9E5] bg-white p-4 shadow-sm sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-[#20332B]">
-                Store Account
-              </h2>
-              <p className="mt-1 text-xs text-[#89958D]">
-                Your registered seller information
-              </p>
-            </div>
-
-            <Link
-              to="/seller/store-profile"
-              className="text-xs font-bold text-[#1A2E26] hover:text-[#B9533B]"
-            >
-              Edit Profile →
-            </Link>
-          </div>
-
-          <div className="mt-5 space-y-4">
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-[#89958D]">
-                Seller Name
-              </p>
-              <p className="mt-1 break-words text-sm font-semibold text-[#20332B]">
-                {seller?.name || "Not available"}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-[#89958D]">
-                Email Address
-              </p>
-              <p className="mt-1 break-all text-sm font-semibold text-[#20332B]">
-                {seller?.email || "Not available"}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E5E9E5] pt-4">
-              <div>
-                <p className="text-[10px] text-[#89958D]">
-                  Account Status
-                </p>
-                <span className="mt-1 inline-flex items-center gap-1.5 text-xs font-bold text-green-700">
-                  <span className="h-2 w-2 rounded-full bg-green-600" />
-                  Approved
-                </span>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </section>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={loadDashboard}
+          className="rounded-xl border border-[#315B53] bg-[#123B38] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1B4B45]"
+        >
+          ↻ Refresh dashboard
+        </button>
       </div>
     </div>
   );

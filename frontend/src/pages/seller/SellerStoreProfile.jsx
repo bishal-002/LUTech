@@ -1,134 +1,225 @@
 
 import { useCallback, useEffect, useState } from "react";
-import axios from "axios";
+import {
+  getSellerProfile,
+  updateSellerProfile,
+} from "../../services/sellerService";
 
-const API_URL = "http://localhost:5000/api/seller/profile";
-
-const initialFormData = {
+const EMPTY_FORM = {
   storeName: "",
-  storeDescription: "",
-  storePhone: "",
-  storeAddress: "",
+  tagline: "",
+  about: "",
+  logoUrl: "",
+  bannerUrl: "",
+  specialties: [],
+  publicAddress: {
+    street: "",
+    area: "",
+    city: "",
+    district: "",
+    postalCode: "",
+    country: "Bangladesh",
+  },
+  supportPhone: "",
+  supportEmail: "",
+  supportHours: {
+    monday: "",
+    tuesday: "",
+    wednesday: "",
+    thursday: "",
+    friday: "",
+    saturday: "",
+    sunday: "",
+  },
+  defaults: {
+    dispatchTime: "",
+    returnPolicy: "",
+    warrantyPolicy: "",
+    vacationMode: false,
+  },
 };
 
-const SellerStoreProfile = () => {
-  const [formData, setFormData] = useState(initialFormData);
+const SPECIALTY_LIMIT = 5;
+
+const inputClass =
+  "w-full rounded-xl border border-[#DDE7E0] bg-[#FAFCFA] px-4 py-3 text-sm text-[#29473C] outline-none transition placeholder:text-[#A0ACA4] focus:border-[#55A88B] focus:bg-white focus:ring-2 focus:ring-[#55A88B]/10";
+
+const labelClass = "mb-2 block text-sm font-semibold text-[#29473C]";
+
+const normalizeSeller = (seller = {}) => ({
+  storeName: seller.storeName || "",
+  tagline: seller.tagline || "",
+  about: seller.about || seller.storeDescription || "",
+  logoUrl: seller.logoUrl || "",
+  bannerUrl: seller.bannerUrl || "",
+  specialties: Array.isArray(seller.specialties)
+    ? seller.specialties
+    : [],
+  publicAddress: {
+    ...EMPTY_FORM.publicAddress,
+    ...(typeof seller.publicAddress === "object"
+      ? seller.publicAddress
+      : {}),
+  },
+  supportPhone: seller.supportPhone || seller.storePhone || "",
+  supportEmail: seller.supportEmail || "",
+  supportHours: {
+    ...EMPTY_FORM.supportHours,
+    ...(typeof seller.supportHours === "object"
+      ? seller.supportHours
+      : {}),
+  },
+  defaults: {
+    ...EMPTY_FORM.defaults,
+    ...(seller.defaults || {}),
+  },
+});
+
+export default function SellerStoreProfile() {
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [specialtyInput, setSpecialtyInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const token = localStorage.getItem("token");
+  const loadProfile = useCallback(async () => {
+    setLoading(true);
+    setError("");
 
-  const getAuthConfig = () => ({
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  const fetchProfile = useCallback(async () => {
     try {
-      setLoading(true);
-      setError("");
-
-      if (!token) {
-        setError("Your session has expired. Please log in again.");
-        return;
-      }
-
-      const response = await axios.get(API_URL, getAuthConfig());
-      const seller = response.data.seller;
-
-      setFormData({
-        storeName: seller.storeName || "",
-        storeDescription: seller.storeDescription || "",
-        storePhone: seller.storePhone || "",
-        storeAddress: seller.storeAddress || "",
-      });
+      const response = await getSellerProfile();
+      setForm(normalizeSeller(response.seller));
     } catch (err) {
       setError(
         err.response?.data?.message ||
-          "Failed to load store profile. Please try again."
+          "Unable to load your store profile."
       );
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
+    loadProfile();
+  }, [loadProfile]);
 
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-
-    setFormData((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
-
+  const updateField = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
     setMessage("");
     setError("");
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+  const updateNested = (section, field, value) => {
+    setForm((current) => ({
+      ...current,
+      [section]: {
+        ...current[section],
+        [field]: value,
+      },
+    }));
     setMessage("");
     setError("");
+  };
 
-    if (!formData.storeName.trim()) {
-      setError("Store name is required.");
+  const addSpecialty = () => {
+    const value = specialtyInput.trim();
+
+    if (!value) return;
+
+    if (value.length > 50) {
+      setError("Each specialty must be 50 characters or fewer.");
+      return;
+    }
+
+    if (form.specialties.length >= SPECIALTY_LIMIT) {
+      setError("You can add up to five specialties.");
+      return;
+    }
+
+    if (
+      form.specialties.some(
+        (item) => item.toLowerCase() === value.toLowerCase()
+      )
+    ) {
+      setError("This specialty has already been added.");
+      return;
+    }
+
+    updateField("specialties", [...form.specialties, value]);
+    setSpecialtyInput("");
+  };
+
+  const removeSpecialty = (value) => {
+    updateField(
+      "specialties",
+      form.specialties.filter((item) => item !== value)
+    );
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+
+    if (form.storeName.trim().length < 3 || form.storeName.trim().length > 50) {
+      setError("Store name must contain 3–50 characters.");
+      return;
+    }
+
+    if (form.about.trim().length < 50 || form.about.trim().length > 1000) {
+      setError("Store description must contain 50–1000 characters.");
+      return;
+    }
+
+    if (form.specialties.length < 1 || form.specialties.length > 5) {
+      setError("Add between one and five store specialties.");
+      return;
+    }
+
+    if (!form.supportPhone.trim()) {
+      setError("A store support phone number is required.");
       return;
     }
 
     try {
       setSaving(true);
 
-      const response = await axios.put(
-        API_URL,
-        {
-          ...formData,
-          storeName: formData.storeName.trim(),
-          storeDescription: formData.storeDescription.trim(),
-          storePhone: formData.storePhone.trim(),
-          storeAddress: formData.storeAddress.trim(),
-        },
-        getAuthConfig()
-      );
+      const payload = {
+        storeName: form.storeName.trim(),
+        tagline: form.tagline.trim(),
+        about: form.about.trim(),
+        logoUrl: form.logoUrl.trim(),
+        bannerUrl: form.bannerUrl.trim(),
+        specialties: form.specialties,
+        publicAddress: form.publicAddress,
+        supportPhone: form.supportPhone.trim(),
+        supportEmail: form.supportEmail.trim(),
+        supportHours: form.supportHours,
+        defaults: form.defaults,
+      };
 
-      const seller = response.data.seller;
+      const response = await updateSellerProfile(payload);
 
-      setFormData({
-        storeName: seller.storeName || "",
-        storeDescription: seller.storeDescription || "",
-        storePhone: seller.storePhone || "",
-        storeAddress: seller.storeAddress || "",
-      });
-
+      setForm(normalizeSeller(response.seller));
       setMessage("Your store profile has been updated successfully.");
     } catch (err) {
       setError(
         err.response?.data?.message ||
-          "Failed to update store profile. Please try again."
+          "Unable to save your store profile."
       );
     } finally {
       setSaving(false);
     }
   };
 
-  const inputClass =
-    "w-full rounded-xl border border-[#DDE7E0] bg-[#FAFCFA] px-4 py-3 text-sm text-[#29473C] outline-none transition placeholder:text-[#A0ACA4] focus:border-[#55A88B] focus:bg-white focus:ring-2 focus:ring-[#55A88B]/10";
-
-  const labelClass =
-    "mb-2 block text-sm font-semibold text-[#29473C]";
-
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="flex min-h-[55vh] items-center justify-center">
         <div className="text-center">
           <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-[#315B53] border-t-[#83CDB5]" />
           <p className="mt-4 text-sm text-[#B5C9C1]">
-            Loading store profile...
+            Loading store settings...
           </p>
         </div>
       </div>
@@ -137,273 +228,343 @@ const SellerStoreProfile = () => {
 
   return (
     <div className="min-h-full space-y-7">
-      {/* Page heading */}
-      <section>
+      <header>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#83CDB5]">
-          Store Management
+          Seller Workspace / Store Management
         </p>
-
         <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">
-          Store Profile
+          Store Profile & Settings
         </h1>
-
         <p className="mt-2 text-sm text-[#A8C0B9]">
-          Manage your store identity, contact information, and description.
+          Manage your public store identity, contact details and operating preferences.
         </p>
-      </section>
+      </header>
 
-      {/* Error and success messages */}
       {message && (
-        <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-          <span className="text-lg">✓</span>
-          <p>{message}</p>
+        <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          ✓ {message}
         </div>
       )}
 
       {error && (
-        <div className="flex flex-col justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 sm:flex-row sm:items-center">
+        <div role="alert" className="flex flex-col justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 sm:flex-row sm:items-center">
           <p>{error}</p>
-
-          <button
-            type="button"
-            onClick={fetchProfile}
-            className="w-fit font-semibold underline"
-          >
-            Try again
+          <button type="button" onClick={loadProfile} className="w-fit font-semibold underline">
+            Reload profile
           </button>
         </div>
       )}
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,0.8fr)]">
-        {/* Profile form */}
-        <section className="overflow-hidden rounded-2xl border border-[#E6ECE8] bg-white shadow-sm">
-          <div className="border-b border-[#EAF0EC] px-5 py-5 sm:px-7">
-            <h2 className="text-lg font-bold text-[#173D36]">
-              Store Information
-            </h2>
-            <p className="mt-1 text-sm text-[#839088]">
-              Keep your store details accurate and up to date.
-            </p>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <section className="rounded-2xl border border-[#E6ECE8] bg-white p-5 shadow-sm sm:p-7">
+          <h2 className="text-lg font-bold text-[#173D36]">Store Identity</h2>
+          <p className="mt-1 text-sm text-[#839088]">
+            These details help customers recognize your business.
+          </p>
+
+          <div className="mt-5 grid gap-5 md:grid-cols-2">
+            <label className={labelClass}>
+              Store name *
+              <input
+                required
+                minLength={3}
+                maxLength={50}
+                value={form.storeName}
+                onChange={(e) => updateField("storeName", e.target.value)}
+                className={inputClass}
+                placeholder="Your store name"
+              />
+              <span className="mt-1 block text-xs font-normal text-[#89958F]">
+                3–50 characters
+              </span>
+            </label>
+
+            <label className={labelClass}>
+              Tagline
+              <input
+                maxLength={100}
+                value={form.tagline}
+                onChange={(e) => updateField("tagline", e.target.value)}
+                className={inputClass}
+                placeholder="A short statement about your store"
+              />
+            </label>
+
+            <label className={labelClass}>
+              Store logo URL
+              <input
+                type="url"
+                value={form.logoUrl}
+                onChange={(e) => updateField("logoUrl", e.target.value)}
+                className={inputClass}
+                placeholder="https://example.com/logo.png"
+              />
+              <span className="mt-1 block text-xs font-normal text-[#89958F]">
+                Use a publicly accessible HTTPS image URL.
+              </span>
+            </label>
+
+            <label className={labelClass}>
+              Store banner URL
+              <input
+                type="url"
+                value={form.bannerUrl}
+                onChange={(e) => updateField("bannerUrl", e.target.value)}
+                className={inputClass}
+                placeholder="https://example.com/banner.jpg"
+              />
+            </label>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6 p-5 sm:p-7">
-            {/* Store name */}
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <label htmlFor="storeName" className={labelClass}>
-                  Store Name <span className="text-rose-500">*</span>
-                </label>
+          <label className={`${labelClass} mt-5`}>
+            Store description *
+            <textarea
+              required
+              minLength={50}
+              maxLength={1000}
+              rows={5}
+              value={form.about}
+              onChange={(e) => updateField("about", e.target.value)}
+              className={`${inputClass} resize-y`}
+              placeholder="Describe your store, products, and customer service..."
+            />
+            <span className="mt-1 block text-xs font-normal text-[#89958F]">
+              {form.about.length}/1000 characters · minimum 50
+            </span>
+          </label>
 
-                <span className="text-xs text-[#98A49C]">
-                  {formData.storeName.length}/100
-                </span>
-              </div>
-
+          <div className="mt-6">
+            <label className={labelClass}>Store specialties *</label>
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input
-                id="storeName"
-                type="text"
-                name="storeName"
-                value={formData.storeName}
-                onChange={handleChange}
-                placeholder="Enter your store name"
-                maxLength={100}
+                value={specialtyInput}
+                maxLength={50}
+                onChange={(e) => setSpecialtyInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addSpecialty();
+                  }
+                }}
                 className={inputClass}
-                required
+                placeholder="e.g. Laptops, Smartphones, Accessories"
               />
-
-              <p className="mt-2 text-xs text-[#89958F]">
-                This is the name customers will associate with your store.
-              </p>
-            </div>
-
-            {/* Store description */}
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <label htmlFor="storeDescription" className={labelClass}>
-                  Store Description
-                </label>
-
-                <span className="text-xs text-[#98A49C]">
-                  {formData.storeDescription.length}/1000
-                </span>
-              </div>
-
-              <textarea
-                id="storeDescription"
-                name="storeDescription"
-                value={formData.storeDescription}
-                onChange={handleChange}
-                rows={5}
-                maxLength={1000}
-                placeholder="Tell customers about your store, products, and what makes your business special..."
-                className={`${inputClass} resize-y`}
-              />
-
-              <p className="mt-2 text-xs text-[#89958F]">
-                A clear description helps customers understand your business.
-              </p>
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label htmlFor="storePhone" className={labelClass}>
-                Store Phone Number
-              </label>
-
-              <input
-                id="storePhone"
-                type="tel"
-                name="storePhone"
-                value={formData.storePhone}
-                onChange={handleChange}
-                placeholder="e.g. 01XXXXXXXXX"
-                maxLength={20}
-                className={inputClass}
-              />
-            </div>
-
-            {/* Address */}
-            <div>
-              <label htmlFor="storeAddress" className={labelClass}>
-                Store Address
-              </label>
-
-              <textarea
-                id="storeAddress"
-                name="storeAddress"
-                value={formData.storeAddress}
-                onChange={handleChange}
-                rows={3}
-                maxLength={300}
-                placeholder="Enter your store's business address"
-                className={`${inputClass} resize-y`}
-              />
-            </div>
-
-            {/* Form actions */}
-            <div className="flex flex-col-reverse justify-between gap-3 border-t border-[#EAF0EC] pt-6 sm:flex-row sm:items-center">
-              <p className="text-xs text-[#89958F]">
-                Fields marked with * are required.
-              </p>
-
               <button
-                type="submit"
-                disabled={saving}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D7055] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#175A44] disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={addSpecialty}
+                className="shrink-0 rounded-xl bg-[#1D7055] px-5 py-3 text-sm font-semibold text-white"
               >
-                {saving ? (
-                  <>
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                    Saving Changes...
-                  </>
-                ) : (
-                  <>
-                    <span>✓</span>
-                    Save Changes
-                  </>
-                )}
+                Add specialty
               </button>
             </div>
-          </form>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {form.specialties.map((specialty) => (
+                <span key={specialty} className="inline-flex items-center gap-2 rounded-full bg-[#E7F5EF] px-3 py-2 text-xs font-semibold text-[#1D7055]">
+                  {specialty}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${specialty}`}
+                    onClick={() => removeSpecialty(specialty)}
+                    className="font-bold"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              {form.specialties.length === 0 && (
+                <p className="text-xs text-[#89958F]">No specialties added.</p>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-[#89958F]">
+              Add 1–5 specialties.
+            </p>
+          </div>
         </section>
 
-        {/* Store preview */}
-        <aside className="space-y-5">
-          <section className="overflow-hidden rounded-2xl border border-[#315B53] bg-[#103633]">
-            <div className="border-b border-[#315B53] px-5 py-5">
-              <h2 className="font-bold text-white">Store Preview</h2>
-              <p className="mt-1 text-xs text-[#A8C0B9]">
-                A preview of your current store information.
-              </p>
-            </div>
+        <section className="rounded-2xl border border-[#E6ECE8] bg-white p-5 shadow-sm sm:p-7">
+          <h2 className="text-lg font-bold text-[#173D36]">Public Business Address</h2>
+          <p className="mt-1 text-sm text-[#839088]">
+            This is your public store address, not your private warehouse or pickup address.
+          </p>
 
-            <div className="p-5">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#83CDB5] text-2xl font-bold text-[#123B35]">
-                {formData.storeName.trim()
-                  ? formData.storeName.trim().charAt(0).toUpperCase()
-                  : "S"}
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            {[
+              ["street", "Street / Building"],
+              ["area", "Area / Locality"],
+              ["city", "City"],
+              ["district", "District"],
+              ["postalCode", "Postal code"],
+              ["country", "Country"],
+            ].map(([key, title]) => (
+              <label key={key} className={labelClass}>
+                {title}
+                <input
+                  value={form.publicAddress[key]}
+                  onChange={(e) => updateNested("publicAddress", key, e.target.value)}
+                  className={inputClass}
+                  maxLength={150}
+                />
+              </label>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-[#E6ECE8] bg-white p-5 shadow-sm sm:p-7">
+          <h2 className="text-lg font-bold text-[#173D36]">Customer Support</h2>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <label className={labelClass}>
+              Support phone *
+              <input
+                required
+                maxLength={30}
+                value={form.supportPhone}
+                onChange={(e) => updateField("supportPhone", e.target.value)}
+                className={inputClass}
+                placeholder="01XXXXXXXXX"
+              />
+            </label>
+            <label className={labelClass}>
+              Support email
+              <input
+                type="email"
+                maxLength={254}
+                value={form.supportEmail}
+                onChange={(e) => updateField("supportEmail", e.target.value)}
+                className={inputClass}
+                placeholder="support@example.com"
+              />
+            </label>
+          </div>
+
+          <h3 className="mt-6 text-sm font-bold text-[#29473C]">Support hours</h3>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {Object.keys(EMPTY_FORM.supportHours).map((day) => (
+              <label key={day} className={labelClass}>
+                {day.charAt(0).toUpperCase() + day.slice(1)}
+                <input
+                  maxLength={100}
+                  value={form.supportHours[day]}
+                  onChange={(e) => updateNested("supportHours", day, e.target.value)}
+                  className={inputClass}
+                  placeholder="e.g. 9:00 AM – 6:00 PM"
+                />
+              </label>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-[#E6ECE8] bg-white p-5 shadow-sm sm:p-7">
+          <h2 className="text-lg font-bold text-[#173D36]">Store Operating Defaults</h2>
+          <p className="mt-1 text-sm text-[#839088]">
+            These are default policy and dispatch details for your store.
+          </p>
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <label className={labelClass}>
+              Dispatch time
+              <input
+                maxLength={100}
+                value={form.defaults.dispatchTime}
+                onChange={(e) => updateNested("defaults", "dispatchTime", e.target.value)}
+                className={inputClass}
+                placeholder="e.g. Within 1–2 business days"
+              />
+            </label>
+
+            <label className={labelClass}>
+              Return policy
+              <textarea
+                rows={3}
+                maxLength={1000}
+                value={form.defaults.returnPolicy}
+                onChange={(e) => updateNested("defaults", "returnPolicy", e.target.value)}
+                className={inputClass}
+              />
+            </label>
+
+            <label className={labelClass}>
+              Warranty policy
+              <textarea
+                rows={3}
+                maxLength={1000}
+                value={form.defaults.warrantyPolicy}
+                onChange={(e) => updateNested("defaults", "warrantyPolicy", e.target.value)}
+                className={inputClass}
+              />
+            </label>
+          </div>
+
+          <label className="mt-5 flex items-start gap-3 rounded-xl bg-[#F4F8F5] p-4">
+            <input
+              type="checkbox"
+              checked={Boolean(form.defaults.vacationMode)}
+              onChange={(e) => updateNested("defaults", "vacationMode", e.target.checked)}
+              className="mt-1 h-4 w-4 accent-emerald-700"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-[#29473C]">
+                Vacation mode
+              </span>
+              <span className="mt-1 block text-xs leading-5 text-[#839088]">
+                Save your vacation preference. This setting alone does not guarantee that listings or orders will be paused.
+              </span>
+            </span>
+          </label>
+        </section>
+
+        <div className="flex flex-col-reverse justify-between gap-3 sm:flex-row sm:items-center">
+          <p className="text-xs text-[#A8C0B9]">
+            Seller type, verification status, commission and private payout/KYC details are controlled separately.
+          </p>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-xl bg-[#83CDB5] px-7 py-3 text-sm font-bold text-[#123B35] transition hover:bg-[#A1DEC9] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {saving ? "Saving changes..." : "Save Store Profile"}
+          </button>
+        </div>
+      </form>
+
+      <section className="rounded-2xl border border-[#315B53] bg-[#103633] p-5">
+        <h2 className="font-bold text-white">Public Store Preview</h2>
+        <div className="mt-4 overflow-hidden rounded-xl bg-[#17443D]">
+          {form.bannerUrl && (
+            <img
+              src={form.bannerUrl}
+              alt="Store banner preview"
+              className="h-32 w-full object-cover"
+              onError={(e) => { e.currentTarget.style.display = "none"; }}
+            />
+          )}
+          <div className="flex items-center gap-4 p-5">
+            {form.logoUrl ? (
+              <img
+                src={form.logoUrl}
+                alt="Store logo preview"
+                className="h-16 w-16 rounded-xl bg-white object-cover"
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+              />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-[#83CDB5] text-2xl font-bold text-[#123B35]">
+                {form.storeName.charAt(0).toUpperCase() || "S"}
               </div>
-
-              <h3 className="mt-5 break-words text-xl font-bold text-white">
-                {formData.storeName.trim() || "Your Store Name"}
+            )}
+            <div className="min-w-0">
+              <h3 className="break-words text-lg font-bold text-white">
+                {form.storeName || "Your Store Name"}
               </h3>
-
-              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-[#B5C9C1]">
-                {formData.storeDescription.trim() ||
-                  "Your store description will appear here once you add it."}
+              <p className="mt-1 text-sm text-[#B5C9C1]">
+                {form.tagline || "Your store tagline"}
               </p>
-
-              <div className="mt-6 space-y-4 border-t border-[#315B53] pt-5">
-                <div className="flex items-start gap-3">
-                  <span className="text-[#83CDB5]">☎</span>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[#83A79A]">
-                      Contact Number
-                    </p>
-                    <p className="mt-1 break-all text-sm text-white">
-                      {formData.storePhone || "Not provided"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <span className="text-[#83CDB5]">⌖</span>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[#83A79A]">
-                      Store Address
-                    </p>
-                    <p className="mt-1 whitespace-pre-wrap break-words text-sm text-white">
-                      {formData.storeAddress || "Not provided"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-xl border border-[#315B53] bg-[#17443D] p-3">
-                <p className="text-xs leading-relaxed text-[#B5C9C1]">
-                  Preview updates as you type. Save your changes to update
-                  your store profile on the server.
-                </p>
-              </div>
             </div>
-          </section>
-
-          {/* Helpful information */}
-          <section className="rounded-2xl border border-[#315B53] bg-[#103633] p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1B4B43] text-lg text-[#83CDB5]">
-                i
-              </div>
-
-              <h3 className="font-bold text-white">Profile Tips</h3>
-            </div>
-
-            <ul className="mt-4 space-y-3 text-sm leading-relaxed text-[#B5C9C1]">
-              <li className="flex gap-2">
-                <span className="text-[#83CDB5]">✓</span>
-                Choose a recognizable store name.
-              </li>
-
-              <li className="flex gap-2">
-                <span className="text-[#83CDB5]">✓</span>
-                Write a clear description of your products.
-              </li>
-
-              <li className="flex gap-2">
-                <span className="text-[#83CDB5]">✓</span>
-                Provide an active contact number.
-              </li>
-
-              <li className="flex gap-2">
-                <span className="text-[#83CDB5]">✓</span>
-                Keep your delivery address accurate.
-              </li>
-            </ul>
-          </section>
-        </aside>
-      </div>
+          </div>
+          <p className="whitespace-pre-wrap px-5 pb-5 text-sm leading-6 text-[#B5C9C1]">
+            {form.about || "Your store description will appear here."}
+          </p>
+        </div>
+      </section>
     </div>
   );
-};
-
-export default SellerStoreProfile;
+}
