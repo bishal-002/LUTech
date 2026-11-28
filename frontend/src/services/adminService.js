@@ -335,3 +335,20 @@ export const processAdminPayout = async (payoutId, data) => {
   );
   return response.data;
 };
+
+// ======================================================
+// ADMIN PLATFORM SETTINGS
+// ======================================================
+
+export const getPlatformSettings = async () => {
+  const response = await axiosClient.get("/admin/platform-settings");
+  return response.data;
+};
+
+export const updatePlatformSettings = async (data) => {
+  const response = await axiosClient.patch(
+    "/admin/platform-settings",
+    data
+  );
+  return response.data;
+};
