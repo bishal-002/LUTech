@@ -33,6 +33,7 @@ import SellerOrders from "./pages/seller/SellerOrders";
 import SellerStoreProfile from "./pages/seller/SellerStoreProfile";
 import SellerLayout from "./components/seller/SellerLayout";
 import SellerVerificationStatus from "./pages/seller/SellerVerificationStatus";
+import SellerPayouts from "./pages/seller/SellerPayouts";
 
 // Route Protection
 import AdminRoute from "./components/AdminRoute";
@@ -210,6 +211,7 @@ function App() {
               <Route path="products/edit/:id" element={<SellerProductForm />} />
               <Route path="orders" element={<SellerOrders />} />
               <Route path="store-profile" element={<SellerStoreProfile />} />
+              <Route path="payouts" element={<SellerPayouts />} />
             </Route>
           </Route>
         </Route>

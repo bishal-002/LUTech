@@ -89,3 +89,26 @@ export const submitSellerKyc = async () => {
   const response = await axiosClient.post("/seller/kyc/submit");
   return response.data;
 };
+
+// Seller payouts and earnings
+export const getSellerPayoutSummary = async () => {
+  const response = await axiosClient.get("/seller/payouts/summary");
+  return response.data;
+};
+
+export const getSellerPayoutHistory = async (params = {}) => {
+  const response = await axiosClient.get("/seller/payouts/history", {
+    params,
+  });
+  return response.data;
+};
+
+export const getSellerPayoutDetails = async () => {
+  const response = await axiosClient.get("/seller/payouts/details");
+  return response.data;
+};
+
+export const updateSellerPayoutDetails = async (data) => {
+  const response = await axiosClient.put("/seller/payouts/details", data);
+  return response.data;
+};

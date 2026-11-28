@@ -10,6 +10,7 @@ const navigation = [
   { label: "Orders", path: "/seller/orders", icon: "▤" },
   { label: "Store Profile", path: "/seller/store-profile", icon: "▣" },
   { label: "Verification & KYC", path: "/seller/verification-status", icon: "✓" },
+  { label: "Payouts & Earnings", path: "/seller/payouts", icon: "৳" },
 ];
 
 function SellerSidebar({ open, onClose }) {
