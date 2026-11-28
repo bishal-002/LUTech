@@ -112,3 +112,34 @@ export const updateSellerPayoutDetails = async (data) => {
   const response = await axiosClient.put("/seller/payouts/details", data);
   return response.data;
 };
+
+// Seller disputes
+export const getSellerDisputes = async (params = {}) => {
+  const response = await axiosClient.get("/seller/disputes", {
+    params,
+  });
+  return response.data;
+};
+
+export const getSellerDisputeById = async (disputeId) => {
+  const response = await axiosClient.get(
+    `/seller/disputes/${disputeId}`
+  );
+  return response.data;
+};
+
+export const respondToSellerDispute = async (disputeId, data) => {
+  const response = await axiosClient.post(
+    `/seller/disputes/${disputeId}/respond`,
+    data
+  );
+  return response.data;
+};
+
+// Seller refund recoveries
+export const getSellerRecoveries = async (params = {}) => {
+  const response = await axiosClient.get("/seller/recoveries", {
+    params,
+  });
+  return response.data;
+};

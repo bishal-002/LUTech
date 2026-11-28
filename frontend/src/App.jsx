@@ -34,6 +34,7 @@ import SellerStoreProfile from "./pages/seller/SellerStoreProfile";
 import SellerLayout from "./components/seller/SellerLayout";
 import SellerVerificationStatus from "./pages/seller/SellerVerificationStatus";
 import SellerPayouts from "./pages/seller/SellerPayouts";
+import SellerDisputes from "./pages/seller/SellerDisputes";
 
 // Route Protection
 import AdminRoute from "./components/AdminRoute";
@@ -212,6 +213,7 @@ function App() {
               <Route path="orders" element={<SellerOrders />} />
               <Route path="store-profile" element={<SellerStoreProfile />} />
               <Route path="payouts" element={<SellerPayouts />} />
+              <Route path="disputes" element={<SellerDisputes />} />
             </Route>
           </Route>
         </Route>

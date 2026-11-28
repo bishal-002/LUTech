@@ -14,6 +14,7 @@ const PAGE_TITLES = [
   { path: "/seller/store-profile", title: "Store Profile" },
   { path: "/seller/verification-status", title: "Verification & KYC" },
   { path: "/seller/payouts", title: "Payouts & Earnings" },
+  { path: "/seller/disputes", title: "Disputes & Recoveries" },
 ];
 
 function getPageTitle(pathname) {

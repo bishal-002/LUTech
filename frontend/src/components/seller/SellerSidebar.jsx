@@ -11,6 +11,7 @@ const navigation = [
   { label: "Store Profile", path: "/seller/store-profile", icon: "▣" },
   { label: "Verification & KYC", path: "/seller/verification-status", icon: "✓" },
   { label: "Payouts & Earnings", path: "/seller/payouts", icon: "৳" },
+  { label: "Disputes & Recoveries", path: "/seller/disputes", icon: "⚖" },
 ];
 
 function SellerSidebar({ open, onClose }) {
